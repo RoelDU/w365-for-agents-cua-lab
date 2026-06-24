@@ -13,11 +13,11 @@ the legacy system.** More CUA + W365A scenarios will be added over time.
 
 ## Demo
 
-![How the demo works: a customer calls, a human agent answers, hands off to an AI agent, which uses a Windows 365 for Agents Cloud PC to fill the claim in the legacy app — no API.](apps/ccaas-agent-desktop/docs/media/demo-flow.png)
+[![Watch the guided demo — a call comes in, the human agent hands off to an AI agent, which uses a Windows 365 for Agents Cloud PC to file the claim in the legacy app with no API. Click to play.](apps/ccaas-agent-desktop/docs/media/demo-flow.png)](https://github.com/RoelDU/w365-for-agents-cua-lab/blob/main/apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-en.mp4)
 
-▶ **[Watch the guided walkthrough (English, ~2.5 min)](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-en.mp4)** — the end-to-end call → hand-off → AI files the claim, plus the Copilot Studio configuration and the Computer Use audit trail (screenshots + reasoning for every step).
+▶ **[Watch the guided walkthrough (English, ~2.5 min)](https://github.com/RoelDU/w365-for-agents-cua-lab/blob/main/apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-en.mp4)** — or click the diagram above. It covers the end-to-end call → hand-off → AI files the claim, the Copilot Studio configuration, and the Computer Use audit trail (screenshots + reasoning for every step).
 
-> **Available in Japanese too.** The Agent Desktop UI switches between English and Japanese with the **EN / 日本語** toggle in the top bar (the AI agent also narrates in the selected language). A Japanese-narrated walkthrough is available at [`zava-ccaas-demo-guided-ja.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-ja.mp4).
+> **Available in Japanese too.** The Agent Desktop UI switches between English and Japanese with the **EN / 日本語** toggle in the top bar (the AI agent also narrates in the selected language). A Japanese-narrated walkthrough is available [here](https://github.com/RoelDU/w365-for-agents-cua-lab/blob/main/apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-ja.mp4).
 
 ---
 
