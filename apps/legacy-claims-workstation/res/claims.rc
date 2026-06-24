@@ -1,0 +1,327 @@
+/*
+ * claims.rc - resources: icon, menus, accelerators, dialog templates.
+ *
+ * Deliberately *no* application manifest is shipped: we want classic comctl
+ * appearance, not Windows 11 themed controls (per build prompt).
+ */
+#include <windows.h>
+#include "../src/resource.h"
+
+/* ---------- Icon ---------- */
+IDI_APP ICON DISCARDABLE "app.ico"
+
+/* ---------- Version info ----------
+ * A complete VERSIONINFO block gives the (unsigned) demo binary legitimate
+ * provenance metadata. Unsigned PEs that carry NO version resource are a strong
+ * Microsoft Defender false-positive heuristic, and a MinGW `-static` build with
+ * no metadata was quarantined as a "Severe threat" on the managed agent Cloud PC
+ * (#114). Populating this materially lowers that heuristic score. The DURABLE fix
+ * is Authenticode code-signing (see the SIGN_* hooks in build.bat / build.sh);
+ * this is the zero-certificate mitigation that ships in the binary itself. */
+1 VERSIONINFO
+FILEVERSION     1,1,1,0
+PRODUCTVERSION  1,1,1,0
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "Zava Mutual"
+            VALUE "FileDescription",  "Zava Mutual Claims Workstation"
+            VALUE "FileVersion",      "1.1.1.0"
+            VALUE "InternalName",     "claims"
+            VALUE "LegalCopyright",   "Copyright (C) Zava Mutual. Demonstration software."
+            VALUE "OriginalFilename", "claims.exe"
+            VALUE "ProductName",      "Zava Mutual Claims Workstation"
+            VALUE "ProductVersion",   "1.1.1.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+/* ---------- Main menu ---------- */
+IDR_MAIN_MENU MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New FNOL\tAlt+N",          IDM_FILE_NEW_FNOL
+        MENUITEM "&Open Record...\tCtrl+O",   IDM_FILE_OPEN
+        MENUITEM "&Save\tCtrl+S",             IDM_FILE_SAVE,    GRAYED
+        MENUITEM "&Print...\tCtrl+P",         IDM_FILE_PRINT,   GRAYED
+        MENUITEM "&Export to Excel...",       IDM_FILE_EXPORT,  GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                     IDM_FILE_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "Cu&t\tCtrl+X",              IDM_EDIT_CUT,     GRAYED
+        MENUITEM "&Copy\tCtrl+C",             IDM_EDIT_COPY,    GRAYED
+        MENUITEM "&Paste\tCtrl+V",            IDM_EDIT_PASTE,   GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "&Find...\tCtrl+F",          IDM_EDIT_FIND
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Refresh\tF5",              IDM_VIEW_REFRESH
+        MENUITEM "&Audit History...",         IDM_VIEW_AUDIT
+    END
+    POPUP "&Records"
+    BEGIN
+        MENUITEM "&Next Record",              IDM_RECORDS_NEXT, GRAYED
+        MENUITEM "&Previous Record",          IDM_RECORDS_PREV, GRAYED
+        MENUITEM "&Go To...",                 IDM_RECORDS_GOTO, GRAYED
+    END
+    POPUP "Re&ports"
+    BEGIN
+        MENUITEM "&Daily Summary",            IDM_REPORTS_DAILY,       GRAYED
+        MENUITEM "&Open Claims Report",       IDM_REPORTS_OPEN_CLAIMS, GRAYED
+        MENUITEM "&Fraud Pattern Report",     IDM_REPORTS_FRAUD
+    END
+    POPUP "&Actions"
+    BEGIN
+        MENUITEM "New &FNOL\tAlt+N",          IDM_ACT_NEWFNOL
+        MENUITEM SEPARATOR
+        MENUITEM "&Transfer Claim...",        IDM_ACT_TRANSFER
+        MENUITEM "&Reassign Adjuster...",     IDM_ACT_REASSIGN
+        MENUITEM "&Close Claim",              IDM_ACT_CLOSE
+        MENUITEM "&Void Claim",               IDM_ACT_VOID
+        MENUITEM SEPARATOR
+        MENUITEM "Reset All &Data",           IDM_TOOLS_RESETDATA
+    END
+    POPUP "&Tools"
+    BEGIN
+        MENUITEM "&Options...",               IDM_TOOLS_OPTIONS, GRAYED
+        MENUITEM "&Host Link Status",         IDM_TOOLS_HOSTLINK
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Contents",                 IDM_HELP_CONTENTS, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "&About...",                 IDM_HELP_ABOUT
+    END
+END
+
+/* ---------- Accelerators ---------- */
+IDR_ACCEL ACCELERATORS
+BEGIN
+    "N",            IDM_FILE_NEW_FNOL,  VIRTKEY, ALT, NOINVERT
+    "F",            IDM_EDIT_FIND,      VIRTKEY, CONTROL, NOINVERT
+    "S",            IDM_FILE_NEW_FNOL,  VIRTKEY, ALT, NOINVERT
+    "R",            IDM_VIEW_REFRESH,   VIRTKEY, ALT, NOINVERT
+    VK_F5,          IDM_VIEW_REFRESH,   VIRTKEY, NOINVERT
+END
+
+/* ---------- Right-click context menus ---------- */
+IDR_LIST_CONTEXT_MENU MENU
+BEGIN
+    POPUP ""
+    BEGIN
+        MENUITEM "&Open Record",              IDM_ACT_OPEN
+        MENUITEM "New &FNOL for Caller",      IDM_ACT_NEWFNOL
+        MENUITEM SEPARATOR
+        MENUITEM "Add &Note...",              IDM_ACT_NOTE
+        MENUITEM "Mark &Suspicious",          IDM_ACT_MARK_SUSPICIOUS
+        MENUITEM SEPARATOR
+        MENUITEM "&Print Record",             IDM_ACT_PRINT
+        MENUITEM "&Export to Excel...",       IDM_ACT_EXPORT
+        MENUITEM "&Audit History...",         IDM_ACT_AUDIT
+    END
+END
+
+IDR_CLAIMS_CONTEXT_MENU MENU
+BEGIN
+    POPUP ""
+    BEGIN
+        MENUITEM "&Reassign Adjuster...",     IDM_ACT_REASSIGN
+        MENUITEM "&Transfer Claim...",        IDM_ACT_TRANSFER
+        MENUITEM "&Close Claim",              IDM_ACT_CLOSE
+        MENUITEM "&Void Claim",               IDM_ACT_VOID
+        MENUITEM SEPARATOR
+        MENUITEM "Add &Note...",              IDM_ACT_NOTE
+        MENUITEM "Mark &Suspicious",          IDM_ACT_MARK_SUSPICIOUS
+        MENUITEM "&Audit History...",         IDM_ACT_AUDIT
+    END
+END
+
+/* ---------- Login dialog ---------- */
+IDD_LOGIN DIALOGEX 0, 0, 280, 174
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Zava Mutual - Agent Sign-On"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT           "Zava Mutual Claims Workstation v1.0",
+                    IDC_LOGIN_TITLE, 12, 8, 256, 10
+    LTEXT           "HOST: WMHOST01 - Branch WST-014",
+                    -1, 12, 22, 256, 10
+    LTEXT           "Agent ID:",        -1, 12,  46, 50, 10
+    EDITTEXT        IDC_LOGIN_AGENT_ID,  68, 44, 80, 14, ES_AUTOHSCROLL | ES_READONLY
+    PUSHBUTTON      "&Switch agent...", IDC_LOGIN_SWITCH, 156, 44, 80, 14
+    LTEXT           "PIN:",             -1, 12,  64, 50, 10
+    EDITTEXT        IDC_LOGIN_PIN,       68, 62, 80, 14, ES_AUTOHSCROLL | ES_PASSWORD | ES_NUMBER
+    LTEXT           "Workstation:",     -1, 12,  82, 50, 10
+    EDITTEXT        IDC_LOGIN_WORKSTATION, 68, 80, 80, 14, ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Branch:",          -1, 12, 100, 50, 10
+    COMBOBOX        IDC_LOGIN_BRANCH,    68, 98, 100, 80,
+                    CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "",                  IDC_LOGIN_STATUS, 12, 122, 256, 22
+    DEFPUSHBUTTON   "&Connect",          IDC_LOGIN_CONNECT, 188, 150, 80, 18
+END
+
+/* ---------- About dialog ---------- */
+IDD_ABOUT DIALOGEX 0, 0, 280, 150
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About Zava Mutual Claims Workstation"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT           "Zava Mutual\nClaims Workstation v1.0\nBuild 7.2.1.4427",
+                    -1, 12, 8, 256, 30
+    LTEXT           "(c) 1998-2024 Zava Mutual Insurance Group, Inc.\n"
+                    "License expires 12/31/2024  *  Support: 1-800-ZAVA\n"
+                    "All rights reserved. This software is licensed, not sold.",
+                    IDC_ABOUT_TEXT, 12, 44, 256, 50
+    LTEXT           "Demonstration build - fictional data - not a real insurance system",
+                    IDC_SPLASH_FOOTER, 12, 100, 256, 10
+    DEFPUSHBUTTON   "OK", IDOK, 110, 124, 60, 16
+END
+
+/* ---------- Compliance banner ---------- */
+IDD_COMPLIANCE DIALOGEX 0, 0, 360, 180
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Zava Mutual - Compliance Notice"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT "ATTENTION: This system contains confidential customer policy and claim "
+          "information protected under federal and state privacy statutes. "
+          "Unauthorized access, use, or disclosure of any information visible on "
+          "this terminal is prohibited and will be subject to civil and criminal "
+          "penalties. All activity is logged and monitored. By clicking I Agree "
+          "you confirm you are an authorized Zava Mutual representative.",
+          IDC_COMPLIANCE_TEXT, 12, 12, 336, 130
+    DEFPUSHBUTTON "I &Agree", IDC_COMPLIANCE_AGREE, 280, 154, 68, 18
+END
+
+/* ---------- Splash ---------- */
+IDD_SPLASH DIALOGEX 0, 0, 280, 120
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT "ZAVA MUTUAL",              -1, 12, 12, 256, 14
+    LTEXT "Claims Workstation v1.0",       IDC_SPLASH_BUILD, 12, 28, 256, 10
+    LTEXT "Initializing host link...",     IDC_SPLASH_TEXT, 12, 50, 256, 10
+    CONTROL "", IDC_SPLASH_PROGRESS, "msctls_progress32",
+            WS_CHILD | WS_VISIBLE, 12, 66, 256, 12
+    LTEXT "Demonstration build - fictional data - not a real insurance system",
+          IDC_SPLASH_FOOTER, 12, 96, 256, 10
+END
+
+/* ---------- Staged auth ---------- */
+IDD_STAGED_AUTH DIALOGEX 0, 0, 320, 200
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Zava Mutual - Establishing Session"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LISTBOX IDC_AUTH_LIST, 12, 12, 296, 168, LBS_NOSEL | LBS_NOTIFY | WS_VSCROLL | WS_BORDER
+END
+
+/* ---------- MOTD ---------- */
+IDD_MOTD DIALOGEX 0, 0, 360, 200
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Zava Mutual - Message of the Day"
+FONT 11, "MS Sans Serif"
+BEGIN
+    EDITTEXT IDC_MOTD_TEXT, 12, 12, 336, 150,
+             ES_MULTILINE | ES_READONLY | WS_VSCROLL
+    DEFPUSHBUTTON "&Acknowledge", IDC_MOTD_ACK, 270, 172, 78, 18
+END
+
+/* ---------- Ready gate ---------- */
+IDD_READY_GATE DIALOGEX 0, 0, 280, 140
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Ready to Accept Calls?"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT "Pre-shift readiness check. Are you ready to accept calls from the queue?",
+          IDC_READY_QUESTION, 12, 12, 256, 24
+    LTEXT "Aux code (if not ready):", -1, 12, 50, 100, 10
+    COMBOBOX IDC_READY_AUX, 12, 62, 120, 60,
+             CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON "&Yes - Ready",        IDC_READY_YES, 12, 110, 100, 18
+    PUSHBUTTON    "&No - Apply Aux",     IDC_READY_NO, 158, 110, 100, 18
+END
+
+/* ---------- Confirm claim submission ---------- */
+IDD_CONFIRM_CLAIM DIALOGEX 0, 0, 280, 100
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "FNOL Submitted"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT "Claim submitted successfully. Claim ID:", -1, 12, 12, 256, 10
+    EDITTEXT IDC_CONFIRM_CLAIM_ID, 12, 28, 256, 14,
+             ES_AUTOHSCROLL | ES_READONLY | WS_BORDER
+    DEFPUSHBUTTON "OK", IDC_CONFIRM_OK, 102, 64, 60, 18
+    PUSHBUTTON    "&Copy to Clipboard", IDC_CONFIRM_COPY, 178, 64, 90, 18
+END
+
+/* ---------- Add Note (used by Notes tab) ---------- */
+IDD_ADD_NOTE DIALOGEX 0, 0, 260, 160
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Add Note"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT    "Severity:", -1, 12, 12, 60, 10
+    COMBOBOX IDC_NOTE_SEVERITY, 80, 10, 80, 60,
+             CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT    "Note:", -1, 12, 32, 60, 10
+    EDITTEXT IDC_NOTE_TEXT, 12, 44, 236, 80,
+             ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
+    DEFPUSHBUTTON "OK", IDOK, 130, 134, 56, 18
+    PUSHBUTTON    "Cancel", IDCANCEL, 192, 134, 56, 18
+END
+
+/* ---------- Add Vehicle (FNOL step 2) ---------- */
+IDD_ADD_VEHICLE DIALOGEX 0, 0, 260, 160
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Add Vehicle / Property"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT "Year:",   -1, 12, 12, 40, 10
+    EDITTEXT IDC_VEH_YEAR, 56, 10, 60, 14, ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT "Make:",   -1, 12, 32, 40, 10
+    EDITTEXT IDC_VEH_MAKE, 56, 30, 192, 14, ES_AUTOHSCROLL
+    LTEXT "Model:",  -1, 12, 52, 40, 10
+    EDITTEXT IDC_VEH_MODEL, 56, 50, 192, 14, ES_AUTOHSCROLL
+    LTEXT "VIN:",    -1, 12, 72, 40, 10
+    EDITTEXT IDC_VEH_VIN, 56, 70, 192, 14, ES_AUTOHSCROLL
+    LTEXT "Damage:", -1, 12, 92, 40, 10
+    EDITTEXT IDC_VEH_DAMAGE, 56, 90, 192, 30, ES_MULTILINE | ES_AUTOVSCROLL
+    DEFPUSHBUTTON "OK", IDOK, 130, 134, 56, 18
+    PUSHBUTTON    "Cancel", IDCANCEL, 192, 134, 56, 18
+END
+
+/* ---------- Add Party (FNOL step 3) ---------- */
+IDD_ADD_PARTY DIALOGEX 0, 0, 260, 160
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION
+CAPTION "Add Party"
+FONT 11, "MS Sans Serif"
+BEGIN
+    LTEXT "Role:",  -1, 12, 12, 40, 10
+    COMBOBOX IDC_PARTY_ROLE, 56, 10, 80, 60,
+             CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT "Name:",  -1, 12, 32, 40, 10
+    EDITTEXT IDC_PARTY_NAME, 56, 30, 192, 14, ES_AUTOHSCROLL
+    LTEXT "Phone:", -1, 12, 52, 40, 10
+    EDITTEXT IDC_PARTY_PHONE, 56, 50, 192, 14, ES_AUTOHSCROLL
+    LTEXT "Addr:",  -1, 12, 72, 40, 10
+    EDITTEXT IDC_PARTY_ADDR, 56, 70, 192, 50, ES_MULTILINE | ES_AUTOVSCROLL
+    DEFPUSHBUTTON "OK", IDOK, 130, 134, 56, 18
+    PUSHBUTTON    "Cancel", IDCANCEL, 192, 134, 56, 18
+END
+

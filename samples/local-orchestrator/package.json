@@ -1,0 +1,35 @@
+{
+  "name": "ccaas-local-orchestrator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser <-> Cloud PC bridge for the CCaaS Demo App: receives CallContext handoffs from the CCaaS Agent Desktop, writes prefill JSON into the legacy claims app handoff folder, and relays ready/result/error back to the desktop.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "chokidar": "^3.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "vitest": "2.1.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

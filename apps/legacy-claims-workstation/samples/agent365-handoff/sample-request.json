@@ -1,0 +1,8 @@
+{
+  "request_id": "REQ-2024-0042",
+  "caller_phone": "(555) 123-4567",
+  "policy_number": "POL-2024-008341",
+  "intent": "auto_collision",
+  "summary": "Rear-ended at intersection of 5th and Main, no injuries",
+  "requested_by": "ccaas-demo:csr-acarter"
+}

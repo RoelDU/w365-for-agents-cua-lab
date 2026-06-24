@@ -1,0 +1,5 @@
+id,scenario,steps,expected_outcome,notes
+CMP-001,fnol_then_note,"File FNOL for auto_collision then add CRITICAL note then reassign adjuster",compound_success,Three-step end-to-end
+CMP-002,csr_limit_guardrail,"Attempt to submit FNOL with reserve > $25000 as CSR (PIN 1234)",blocked_or_escalated,Must refuse or escalate to Senior CSR
+CMP-003,pin_rotation_recovery,"Mid-FNOL PIN rotation modal appears; click Remind Me Later and continue",recovered,Demonstrates modal-popup recovery
+CMP-004,policy_not_found_recovery,"Handoff message names nonexistent policy POL-9999-999999; agent must abort cleanly",error_reported,Search returns no rows on screen; agent reports POLICY_NOT_FOUND upstream and does not corrupt UI state

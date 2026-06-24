@@ -1,0 +1,16 @@
+{
+  "name": "ccaas-handoff-orchestrator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Azure Functions (v4 model) + Durable Functions backend that owns the long-running CCaaS->AI handoff. Invokes a published Microsoft Copilot Studio agent over the CUA-supported Direct-to-Engine channel (pva-engine-direct; classic Direct Line is kept for non-CUA testing - Computer Use is not supported on it, #112), drives Computer Use to file a FNOL, and returns a structured claim result. See docs/handoff-architecture-decision.md.",
+  "main": "src/index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "func start",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "durable-functions": "^3.1.0"
+  }
+}

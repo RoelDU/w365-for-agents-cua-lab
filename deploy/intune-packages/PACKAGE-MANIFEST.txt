@@ -1,0 +1,10 @@
+Zava CCaaS demo - Intune package manifest
+Generated: 2026-06-17 08:49:13 (build host)
+Source: bigger-font release - claims.exe v1.1.0.0, WGM_UI_SCALE 185, version-aware Detect.ps1
+Deploy with: scripts\Deploy-DemoEnvironment.ps1 (WITHOUT -BuildPackages) OR remove+recreate to force content update
+Intune install command:   claims.exe --install
+Intune uninstall command: "%ProgramFiles%\Business Applications\Zava Claims Workstation\claims.exe" --uninstall
+Detection: Detect.ps1 (version-aware, requires v1.1.0.0); 64-bit; Run-as-32-bit = No
+
+ZavaClaims.intunewin  238578 bytes
+  SHA256: 850B9430B769C6DAF59789D5BAD27CFD85BB83F19EC7E6844B54DC6E50AB6D12

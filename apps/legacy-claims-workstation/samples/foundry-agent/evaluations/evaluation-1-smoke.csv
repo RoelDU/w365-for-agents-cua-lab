@@ -1,0 +1,6 @@
+id,intent,handoff_request_id,handoff_caller_phone,handoff_policy_number,handoff_summary,expected_outcome,expected_claim_id_regex,notes
+SMK-001,launch,REQ-2025-0001,,,Just launch the app and confirm it is ready,app_ready,,No handoff data; verify --no-splash --fast-auth --demo-pin brings the main window up with HOST: LINKED and the search box enabled
+SMK-002,login,REQ-2025-0002,(555) 123-4567,POL-2024-008341,Smoke login as CSR,app_ready,,Confirm demo-pin auto-login (1234) works and main window appears
+SMK-003,hero_lookup,REQ-2025-0003,(555) 123-4567,POL-2024-008341,Hero record lookup,policy_loaded,,Phone search selects policy POL-2024-008341 on screen
+SMK-004,policy_detail,REQ-2025-0004,(555) 123-4567,POL-2024-008341,Read Policy tab,policy_loaded,,Verify Policy tab shows Jordan Smith and AUTO type
+SMK-005,claim_list,REQ-2025-0005,(555) 123-4567,POL-2024-008341,Verify claims list,claims_visible,,Claims tab must list >= 1 prior claim (CLM-2023-004411)

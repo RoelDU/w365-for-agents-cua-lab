@@ -1,0 +1,8 @@
+id,intent,handoff_request_id,handoff_caller_phone,handoff_policy_number,loss_type,narrative,expected_outcome,expected_claim_id_regex,notes
+WR-001,auto_collision,REQ-2025-0201,(555) 123-4567,POL-2024-008341,COLLISION,Rear-ended at 5th and Main no injuries,submitted,^CLM-\d{4}-\d{6}$,Hero auto collision
+WR-002,home_water,REQ-2025-0202,(555) 222-0198,POL-2024-002210,WATER,Burst supply line kitchen,submitted,^CLM-\d{4}-\d{6}$,Hero home water
+WR-003,auto_glass,REQ-2025-0203,(555) 123-4567,POL-2024-008341,GLASS,Cracked windshield repairable,submitted,^CLM-\d{4}-\d{6}$,Glass claim under same policy
+WR-004,liability,REQ-2025-0204,(555) 777-1212,POL-2024-000777,LIABILITY,Slip and fall at residence,submitted,^CLM-\d{4}-\d{6}$,New liability on fraud subject
+WR-005,note_info,REQ-2025-0205,(555) 123-4567,POL-2024-008341,COLLISION,Test add INFO note,note_added,,Add INFO note to most recent claim
+WR-006,note_critical,REQ-2025-0206,(555) 777-1212,POL-2024-000777,LIABILITY,Test add CRITICAL note,note_added,,Manager-only severity test
+WR-007,reassign,REQ-2025-0207,(555) 123-4567,POL-2024-008341,COLLISION,Reassign adjuster to ADJ-NA-0207,reassigned,,Open claim reassigned through Actions menu

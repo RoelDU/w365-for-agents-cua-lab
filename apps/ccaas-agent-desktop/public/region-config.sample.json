@@ -1,0 +1,17 @@
+{
+  "_README": "TEMPLATE. Copy to region-config.json (gitignored) and fill with your own Copilot Studio agent endpoints. Served at runtime so the CUA region can change with no rebuild. Resolution: build-time VITE_DIRECTLINE_TOKEN_URL fallback -> /region-config.json -> ?region=<id>. Get directLineTokenUrl from Copilot Studio > Channels > Web app (the botsbyschema/<schema> segment is environment-specific). See docs/region-config.md.",
+  "activeRegion": "primary",
+  "regions": [
+    {
+      "id": "primary",
+      "label": "Primary region",
+      "directLineTokenUrl": "https://YOUR-ENV-HOST.environment.api.powerplatform.com/powervirtualagents/botsbyschema/YOUR_SCHEMA/directline/token?api-version=2022-03-01-preview",
+      "orchestratorUrl": "https://YOUR-HANDOFF-FUNC.azurewebsites.net/api"
+    },
+    {
+      "id": "secondary",
+      "label": "Secondary region",
+      "directLineTokenUrl": "https://YOUR-OTHER-ENV-HOST.environment.api.powerplatform.com/powervirtualagents/botsbyschema/YOUR_SCHEMA/directline/token?api-version=2022-03-01-preview"
+    }
+  ]
+}

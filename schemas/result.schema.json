@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RoelDU/w365-for-agents-cua-lab/schemas/v1/result.schema.json",
+  "title": "Result",
+  "description": "File the legacy app writes into the handoff `out\\` folder after the FNOL is successfully submitted.",
+  "type": "object",
+  "required": ["request_id", "status", "claim_id", "agent_id", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "pattern": "^REQ-[0-9]{4}-[0-9]{4,}$" },
+    "status": { "const": "submitted" },
+    "claim_id": { "type": "string", "pattern": "^CLM-\\d{4}-\\d{6}$" },
+    "policy_number": { "type": "string", "pattern": "^POL-\\d{4}-\\d{6}$" },
+    "agent_id": { "type": "string", "description": "The simulated legacy agent ID that submitted the claim (e.g., 'C1001')." },
+    "reserve_amount": { "type": ["number", "null"], "minimum": 0 },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "examples": [
+    {
+      "request_id": "REQ-2024-0042",
+      "status": "submitted",
+      "claim_id": "CLM-2024-000123",
+      "policy_number": "POL-2024-008341",
+      "agent_id": "C1001",
+      "reserve_amount": 4200.00,
+      "timestamp": "2024-04-15T18:36:02Z"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "ccaas-foundry-w365a-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Foundry + Windows 365 for Agents runner for the CCaaS Demo App: captures the CCaaS outcome from the handoff folder, checks out a Windows 365 for Agents Cloud PC via the session-lifecycle API, drives the legacy claims app with the Azure AI Foundry Computer Use loop, and relays ready/result/error back to the CCaaS Agent Desktop.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "once": "node dist/index.js --once",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "chokidar": "^3.6.0"
+  },
+  "optionalDependencies": {
+    "@azure/identity": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "vitest": "2.1.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

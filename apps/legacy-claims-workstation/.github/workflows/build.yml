@@ -1,0 +1,103 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/legacy-claims-workstation/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/legacy-claims-workstation/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/legacy-claims-workstation
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show MinGW toolchain
+        run: |
+          which gcc || true
+          gcc --version || true
+          windres --version || true
+
+      - name: Build claims.exe
+        run: |
+          ./build.sh
+        env:
+          CC: gcc
+          WINDRES: windres
+
+      - name: Sign claims.exe (optional, durable fix for #114)
+        shell: pwsh
+        env:
+          CLAIMS_SIGN_PFX_BASE64: ${{ secrets.CLAIMS_SIGN_PFX_BASE64 }}
+          CLAIMS_SIGN_PASSWORD: ${{ secrets.CLAIMS_SIGN_PASSWORD }}
+        run: |
+          if (-not $env:CLAIMS_SIGN_PFX_BASE64) {
+            Write-Host "No CLAIMS_SIGN_PFX_BASE64 secret set; claims.exe stays UNSIGNED (#114). Add a code-signing cert to remove the Defender 'Severe threat' quarantine on the agent Cloud PC."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'claims-sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CLAIMS_SIGN_PFX_BASE64))
+          $ts = 'http://timestamp.digicert.com'
+          $st = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' -ErrorAction SilentlyContinue |
+                Sort-Object FullName | Select-Object -Last 1
+          $signtool = if ($st) { $st.FullName } else { (Get-Command signtool -ErrorAction SilentlyContinue).Source }
+          if (-not $signtool) { Write-Error 'signtool not found on the runner'; exit 1 }
+          & $signtool sign /f $pfx /p $env:CLAIMS_SIGN_PASSWORD /fd SHA256 /tr $ts /td SHA256 claims.exe
+          if ($LASTEXITCODE -ne 0) { Remove-Item $pfx -Force; exit 1 }
+          & $signtool verify /pa claims.exe
+          $code = $LASTEXITCODE
+          Remove-Item $pfx -Force
+          if ($code -ne 0) { exit 1 }
+          Write-Host 'claims.exe signed and verified.'
+
+      - name: Run embedded tests
+        run: |
+          ./claims.exe --test
+
+      - name: Prepare release zip
+        run: |
+          mkdir -p dist/ZavaClaims
+          cp claims.exe dist/ZavaClaims/
+          cp -r installer dist/ZavaClaims/
+          cp -r samples   dist/ZavaClaims/
+          cp README.md WORKFLOWS.md INTEGRATION.md ACCESSIBILITY.md LICENSE \
+             CONTRIBUTING.md dist/ZavaClaims/
+          cd dist
+          7z a -tzip ../ZavaClaims.zip ZavaClaims
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZavaClaims
+          path: apps/legacy-claims-workstation/ZavaClaims.zip
+          if-no-files-found: error
+
+      - name: Try Intune Win32 packaging (optional)
+        continue-on-error: true
+        run: |
+          if command -v IntuneWinAppUtil.exe >/dev/null 2>&1; then
+            mkdir -p intune
+            IntuneWinAppUtil.exe -c dist/ZavaClaims -s claims.exe \
+              -o intune -q || true
+            ls intune || true
+          else
+            echo "IntuneWinAppUtil.exe not present; skipping .intunewin"
+          fi
+
+      - name: Upload .intunewin (if present)
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZavaClaims-intunewin
+          path: apps/legacy-claims-workstation/intune/*.intunewin
+          if-no-files-found: ignore

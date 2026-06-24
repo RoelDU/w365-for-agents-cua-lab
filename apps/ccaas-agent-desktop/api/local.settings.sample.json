@@ -1,0 +1,16 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "",
+
+    "FOUNDRY_PROJECT_ENDPOINT": "https://<your-foundry>.services.ai.azure.com/api/projects/<project>",
+    "FOUNDRY_AGENT_ID": "asst_xxxxxxxxxxxxxxxxxxxxxxxx",
+    "FOUNDRY_API_VERSION": "2025-05-15-preview",
+    "FOUNDRY_TOKEN_AUDIENCE": "https://ai.azure.com",
+
+    "AZURE_TENANT_ID": "00000000-0000-0000-0000-000000000000",
+    "AZURE_CLIENT_ID": "00000000-0000-0000-0000-000000000000",
+    "AZURE_CLIENT_SECRET": ""
+  }
+}

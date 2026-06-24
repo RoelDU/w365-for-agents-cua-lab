@@ -1,0 +1,8 @@
+id,intent,handoff_request_id,handoff_caller_phone,handoff_policy_number,search_field,search_value,expected_outcome,notes
+RO-001,search_phone,REQ-2025-0101,(555) 222-0198,,phone,(555) 222-0198,one_match,Morgan Lee
+RO-002,search_policy,REQ-2025-0102,,POL-2024-002210,policy,POL-2024-002210,one_match,Morgan Lee via policy #
+RO-003,search_name,REQ-2025-0103,,,name,Smith,multi_match,At least Jordan Smith plus generated Smiths
+RO-004,search_claim,REQ-2025-0104,,,claim,CLM-2023-004411,one_match,Jordan Smith prior glass claim
+RO-005,coverage_tree,REQ-2025-0105,(555) 222-0198,POL-2024-002210,,,coverages_visible,Coverage tab tree contains DWELL-A
+RO-006,prior_claims,REQ-2025-0106,(555) 777-1212,POL-2024-000777,,,three_claims,Dakota Quinn fraud pattern shows 3 PEND-REVW claims
+RO-007,unknown_policy,REQ-2025-0107,(555) 000-0000,POL-9999-999999,,,error,Empty search results on screen; agent must report POLICY_NOT_FOUND upstream

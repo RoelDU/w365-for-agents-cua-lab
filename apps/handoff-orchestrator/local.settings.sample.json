@@ -1,0 +1,40 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+
+    "_comment_directline": "Direct Line is the Zava custom channel adapter to the published Copilot Studio agent. NOTE: classic Direct Line does NOT support Computer Use (issue #112) - use HANDOFF_CHANNEL=engine (Direct-to-Engine) for the CUA handoff. Direct Line remains for non-CUA testing. The secret comes from Copilot Studio > Settings > Security/Channels > the custom/Direct Line channel. NEVER commit a real secret and NEVER expose it to the browser - it lives only in server-side settings (locally here, in Key Vault via managed identity in Azure: set DIRECTLINE_SECRET to a Key Vault reference).",
+    "HANDOFF_CHANNEL": "engine",
+    "DIRECTLINE_SECRET": "",
+    "_comment_directline_token": "Use ONLY when Copilot Studio exposes no classic Direct Line secret (e.g. the 60-day premium trial / Microsoft 365 Agents SDK channel). Paste the Direct Line token endpoint URL (.../directline/token?api-version=...). The orchestrator GETs it to obtain a conversation-bound token. Leave blank when DIRECTLINE_SECRET is set; provide exactly one.",
+    "DIRECTLINE_TOKEN_ENDPOINT": "",
+    "DIRECTLINE_BASE_URL": "https://directline.botframework.com",
+
+    "_comment_engine": "Direct-to-Engine (channel pva-engine-direct) is the CUA-SUPPORTED invocation path (issue #112). Computer Use only runs on msteams, pva-engine-direct, pva-studio, pva-maker-evaluation, pva-autonomous - classic Bot Framework Direct Line ('directline') is NOT supported, so an orchestrator on Direct Line reaches the Cloud PC but Computer Use never executes. Set HANDOFF_CHANNEL=engine and fill the ENGINE_* settings below. ENGINE_CONVERSATIONS_URL is the per-environment Direct-to-Engine conversations endpoint, e.g. https://{env}.environment.api.powerplatform.com/powervirtualagents/botsbyschema/{schema}/conversations?api-version=2022-03-01-preview (copy it verbatim; the host segment is environment-specific). The same pvaSetContext + natural-language trigger contract is reused.",
+    "ENGINE_CONVERSATIONS_URL": "",
+    "_comment_engine_auth": "Direct-to-Engine needs an Entra ID bearer token (no anonymous secret). Two unattended modes: (1) client credentials - set ENGINE_TENANT_ID + ENGINE_CLIENT_ID + ENGINE_CLIENT_SECRET (secret -> Key Vault reference in Azure), ENGINE_SCOPE defaults to https://api.powerplatform.com/.default; or (2) inject a token - set ENGINE_TOKEN_ENDPOINT (GET returns { token, expires_in }) or a pre-obtained ENGINE_TOKEN. Use mode (2) if app-only tokens are not permitted (the M365 Agents SDK Copilot Studio client is delegated-only).",
+    "ENGINE_TENANT_ID": "",
+    "ENGINE_CLIENT_ID": "",
+    "ENGINE_CLIENT_SECRET": "",
+    "ENGINE_SCOPE": "",
+    "ENGINE_TOKEN_ENDPOINT": "",
+    "ENGINE_TOKEN": "",
+
+    "_comment_trigger": "The natural-language instruction the trigger activity sends (after pvaSetContext) so the agent's GENERATIVE ORCHESTRATION routes to the Computer Use tool. MUST match the live HANDOFF_TRIGGER_TEXT app setting. Do NOT use the bare token 'start_fnol_handoff' — that only matches the broken classic topic (Redirect-to-Computer-use → instant SystemError, #69). Natural language bypasses the topic via the confirmed-working generative path; caller data arrives via pvaSetContext globals.",
+    "HANDOFF_TRIGGER_TEXT": "A customer phone call has been handed off to you for automated processing. Using the caller phone, policy number, intent, and summary from the handoff context, open the Zava Mutual Claims Workstation and file a new First Notice of Loss, then return the resulting claim ID.",
+
+    "_comment_timers": "pollIntervalMs = how often the orchestrator polls Direct Line for the agent's terminal result. executionTimeoutMs = hard cap on a single handoff before it is marked timed_out. queueTimeoutMs reserved for W365A pool-exhaustion 'queued' handling.",
+    "HANDOFF_POLL_INTERVAL_MS": "5000",
+    "HANDOFF_EXECUTION_TIMEOUT_MS": "900000",
+
+    "_comment_callback": "Shared key the Copilot Studio typed result-flow presents on POST /api/handoff/{id}/result (x-handoff-key header) so a stray caller cannot complete a handoff. In Azure set it to a Key Vault reference. If it is BLANK the callback is refused (503) UNLESS HANDOFF_ALLOW_INSECURE_CALLBACK=true, which permits an UNAUTHENTICATED callback for LOCAL DEV ONLY.",
+    "HANDOFF_CALLBACK_KEY": "",
+    "HANDOFF_ALLOW_INSECURE_CALLBACK": "true",
+
+    "_comment_d365": "Future swap target. When HANDOFF_CHANNEL=d365 the agent is reached through Dynamics 365 Contact Center's native Omnichannel channel instead of this custom adapter - see docs/handoff-architecture-decision.md. No Direct Line secret is needed in that mode."
+  },
+  "Host": {
+    "CORS": "*"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RoelDU/w365-for-agents-cua-lab/schemas/v1/prefill.schema.json",
+  "title": "Prefill",
+  "description": "File the local orchestrator (or Agent365) writes into the legacy app's handoff `in\\` folder. Derived from CallContext.",
+  "type": "object",
+  "required": ["request_id", "caller_phone", "intent", "summary", "requested_by"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "pattern": "^REQ-[0-9]{4}-[0-9]{4,}$" },
+    "caller_phone": { "type": "string", "pattern": "^\\(\\d{3}\\) \\d{3}-\\d{4}$" },
+    "policy_number": { "type": ["string", "null"], "pattern": "^POL-\\d{4}-\\d{6}$" },
+    "intent": { "type": "string", "enum": ["auto_collision", "auto_theft", "auto_glass", "home_water", "home_fire", "home_wind", "liability", "fraud_investigation", "other"] },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "requested_by": { "type": "string", "description": "Free-form identifier of the upstream system or agent that produced this prefill (e.g., 'ccaas-desktop:csr-acarter')." },
+    "target_backend": { "type": "string", "enum": ["mcs", "foundry"], "description": "Which AI backend the presenter routed this handoff to. A consumer that drives the Cloud PC via Computer Use MUST ignore a prefill not addressed to it, so two agents never drive the app at once. Omitted = legacy/unaddressed." }
+  },
+  "examples": [
+    {
+      "request_id": "REQ-2024-0042",
+      "caller_phone": "(555) 123-4567",
+      "policy_number": "POL-2024-008341",
+      "intent": "auto_collision",
+      "summary": "Rear-ended at intersection of 5th and Main, no injuries",
+      "requested_by": "ccaas-desktop:csr-acarter"
+    }
+  ]
+}

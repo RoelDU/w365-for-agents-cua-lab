@@ -1,0 +1,15 @@
+{
+  "name": "ccaas-agent-desktop-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Azure Static Web Apps managed Functions for the Zava CCaaS agent desktop. Implements the /api/handoff seam: it starts an Azure AI Foundry agent run (fire-and-forget) and exposes a polling status endpoint. Seam #1 (CCaaS -> agent) only; the agent drives the legacy app purely on screen (seam #2).",
+  "main": "src/index.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "func start",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0"
+  }
+}

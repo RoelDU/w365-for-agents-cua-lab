@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RoelDU/w365-for-agents-cua-lab/schemas/v1/error.schema.json",
+  "title": "Error",
+  "description": "File the legacy app writes into the handoff `out\\` folder when an unrecoverable error occurs (e.g., policy not found, simulated host link permanently down, FNOL submission rejected).",
+  "type": "object",
+  "required": ["request_id", "status", "error_code", "message", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "pattern": "^REQ-[0-9]{4}-[0-9]{4,}$" },
+    "status": { "const": "error" },
+    "error_code": {
+      "type": "string",
+      "enum": [
+        "POLICY_NOT_FOUND",
+        "PREFILL_INVALID",
+        "HOST_LINK_DOWN",
+        "COVERAGE_NOT_APPLICABLE",
+        "SUBMISSION_REJECTED",
+        "USER_CANCELLED",
+        "UNKNOWN"
+      ]
+    },
+    "message": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "examples": [
+    {
+      "request_id": "REQ-2024-0042",
+      "status": "error",
+      "error_code": "POLICY_NOT_FOUND",
+      "message": "No matching policy found for caller_phone (555) 123-4567 or policy_number POL-2024-008341.",
+      "timestamp": "2024-04-15T18:32:35Z"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RoelDU/w365-for-agents-cua-lab/schemas/v1/ready.schema.json",
+  "title": "Ready",
+  "description": "File the legacy app writes into the handoff `out\\` folder once the app is ready for the Foundry agent (via CUA) to start interacting. The agent must wait on this file before sending keystrokes.",
+  "type": "object",
+  "required": ["request_id", "status", "window_title", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "pattern": "^REQ-[0-9]{4}-[0-9]{4,}$" },
+    "status": { "const": "ready" },
+    "window_title": { "type": "string", "description": "Exact title of the main app window the agent should be targeting." },
+    "matched_policy_number": { "type": ["string", "null"], "pattern": "^POL-\\d{4}-\\d{6}$" },
+    "matched_customer_name": { "type": ["string", "null"] },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "examples": [
+    {
+      "request_id": "REQ-2024-0042",
+      "status": "ready",
+      "window_title": "Zava Mutual — Claims Workstation v1.0",
+      "matched_policy_number": "POL-2024-008341",
+      "matched_customer_name": "Jordan Smith",
+      "timestamp": "2024-04-15T18:32:34Z"
+    }
+  ]
+}

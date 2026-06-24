@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RoelDU/w365-for-agents-cua-lab/schemas/v1/call-context.schema.json",
+  "title": "CallContext",
+  "description": "Payload the CCaaS Agent Desktop emits when the human agent hands off a call to the AI Agent (Agent365 → Foundry agent + CUA). Becomes the basis of the prefill JSON delivered to the legacy app.",
+  "type": "object",
+  "required": ["request_id", "caller_phone", "intent", "summary", "requested_by", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^REQ-[0-9]{4}-[0-9]{4,}$",
+      "description": "Unique request ID for this handoff. Echoed in ready/result/error so the CCaaS desktop can correlate."
+    },
+    "caller_phone": {
+      "type": "string",
+      "pattern": "^\\(\\d{3}\\) \\d{3}-\\d{4}$",
+      "description": "US phone number in (NPA) NXX-XXXX format. Used to look up the policy in the legacy app."
+    },
+    "policy_number": {
+      "type": ["string", "null"],
+      "pattern": "^POL-\\d{4}-\\d{6}$",
+      "description": "Optional. If known (e.g., caller provided it on the IVR), passed through so the legacy app can search by policy."
+    },
+    "intent": {
+      "type": "string",
+      "enum": ["auto_collision", "auto_theft", "auto_glass", "home_water", "home_fire", "home_wind", "liability", "fraud_investigation", "other"],
+      "description": "Coarse intent classified by the CCaaS desktop (or simulated)."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "Short natural-language summary of the call so far, used as the seed narrative for the FNOL."
+    },
+    "transcript_excerpt": {
+      "type": "string",
+      "maxLength": 4000,
+      "description": "Optional last ~30 seconds of transcript for the Foundry agent to ground on."
+    },
+    "requested_by": {
+      "type": "object",
+      "required": ["agent_id", "display_name"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": { "type": "string" },
+        "display_name": { "type": "string" },
+        "email": { "type": "string", "format": "email" }
+      },
+      "description": "The human contact-center agent who initiated the handoff."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the handoff was initiated (ISO 8601 UTC)."
+    },
+    "target_backend": {
+      "type": "string",
+      "enum": ["mcs", "foundry"],
+      "description": "Which AI backend the presenter routed this handoff to (the desktop backend toggle). Consumers that drive the Cloud PC via Computer Use (e.g. the Foundry + W365A runner) MUST ignore a handoff not addressed to them, so two agents never drive the app at once. Omitted = legacy/unaddressed (any single configured consumer may act)."
+    }
+  },
+  "examples": [
+    {
+      "request_id": "REQ-2024-0042",
+      "caller_phone": "(555) 123-4567",
+      "policy_number": "POL-2024-008341",
+      "intent": "auto_collision",
+      "summary": "Rear-ended at intersection of 5th and Main, no injuries reported, both vehicles drivable.",
+      "transcript_excerpt": "Caller: ...about 2:30 this afternoon, I was stopped at the light at 5th and Main and a Honda Civic rear-ended me. No one was hurt. Both cars can still be driven.",
+      "requested_by": {
+        "agent_id": "csr-acarter",
+        "display_name": "A. Carter",
+        "email": "acarter@zavamutual.demo"
+      },
+      "timestamp": "2024-04-15T18:32:11Z"
+    }
+  ]
+}

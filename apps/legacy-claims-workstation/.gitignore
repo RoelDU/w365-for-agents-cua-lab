@@ -1,0 +1,26 @@
+# Build outputs
+claims.exe
+res/claims.res
+src/*.o
+src/*.d
+*.o
+*.obj
+
+# Test scratch outputs
+out/
+ZavaClaims.zip
+dist/
+intune/
+*.intunewin
+
+# Local data exports (regenerated on demand)
+data/*.csv
+data/last_agent.txt
+
+# Editor / OS
+.vs/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

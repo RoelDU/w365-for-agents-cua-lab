@@ -1,0 +1,97 @@
+{
+  "_README": "Copy this to demo-config.local.json (same folder) and edit that copy. demo-config.local.json is git-ignored - never commit it. Full field-by-field help: docs/config-reference.md.",
+  "_EDIT_THESE_3": "For your FIRST build set only: azure.subscriptionId, azure.tenantId, azure.location. Leave handoffOrchestrator.directLineSecret BLANK - you get it later by building+publishing the agent (docs/build-the-agent.md); a blank secret just makes the build skip the AI backend and re-run later. Leave everything else as-is.",
+
+  "_agentBackend": "Which AI backend captures the CCaaS outcome and drives Computer Use on the Windows 365 for Agents Cloud PC: 'mcs' = Microsoft Copilot Studio over Direct Line (DEFAULT, needs the orchestrator + a published agent); 'foundry' = Azure AI Foundry Computer-Use agent driven by samples/foundry-w365a-runner (skips the orchestrator); 'both' = configure both and let the desktop's backend toggle switch live for demos. Overridable with -AgentBackend on Build-DemoFromScratch.ps1.",
+  "agentBackend": "mcs",
+
+  "azure": {
+    "_comment": "EDIT: your subscription, tenant, and workload region. 'location' is the SINGLE SOURCE OF TRUTH for region - the build uses it for every Azure resource and auto-derives anything region-specific (nearest SWA region, the Power Platform geo it checks) from it, choosing the closest available when the exact region isn't offered. Create your Copilot Studio/Dataverse environment in the matching geo too, so the Cloud PC pool lands in this region (the build can't move it; it only warns on mismatch).",
+    "subscriptionId": "00000000-0000-0000-0000-000000000000",
+    "tenantId": "00000000-0000-0000-0000-000000000000",
+    "globalAdminUpn": "admin@contoso.onmicrosoft.com",
+    "location": "australiaeast"
+  },
+
+  "handoffOrchestrator": {
+    "_comment": "The AI handoff backend - deployed automatically. EDIT directLineSecret OR directLineTokenEndpoint.",
+    "_directLineSecret": "Paste the Direct Line secret from your published Copilot Studio agent (see docs/build-the-agent.md). Leave blank on a first run: the build then skips this backend, deploys the website, and tells you to paste it in and re-run. Never commit it.",
+    "directLineSecret": "",
+    "_directLineTokenEndpoint": "Use INSTEAD of directLineSecret when your Copilot Studio channel exposes no classic Direct Line secret (e.g. the 60-day premium trial / Microsoft 365 Agents SDK). Paste the Direct Line token endpoint URL (.../directline/token?api-version=...). Provide exactly one of directLineSecret / directLineTokenEndpoint. Never commit it.",
+    "directLineTokenEndpoint": "",
+    "enabled": true,
+    "resourceGroup": "Zava-CCaaS-Demo",
+    "mcsAgentName": "Zava Claims Intake (CUA)",
+    "_triggerText": "Natural-language instruction so the agent's generative orchestration routes to Computer Use. MUST match the live HANDOFF_TRIGGER_TEXT. Do NOT use the bare token 'start_fnol_handoff' (matches only the broken classic topic, #69).",
+    "triggerText": "A customer phone call has been handed off to you for automated processing. Using the caller phone, policy number, intent, and summary from the handoff context, open the Zava Mutual Claims Workstation and file a new First Notice of Loss, then return the resulting claim ID.",
+    "channel": "engine",
+    "directLineBaseUrl": "https://directline.botframework.com",
+    "_engine": "Direct-to-Engine (channel pva-engine-direct) is the CUA-SUPPORTED invocation path (#112). Computer Use does NOT run on classic Direct Line, so use channel='engine' for the handoff. Set engine.conversationsUrl (per-environment, copy verbatim) plus an Entra auth: either client credentials (tenantId+clientId+clientSecret, scope defaults to https://api.powerplatform.com/.default) OR an injected token (tokenEndpoint / token). Secrets (clientSecret, token) go to Key Vault automatically; never commit them.",
+    "engine": {
+      "conversationsUrl": "",
+      "tenantId": "",
+      "clientId": "",
+      "clientSecret": "",
+      "scope": "",
+      "tokenEndpoint": "",
+      "token": ""
+    },
+    "_autoNames": "Leave blank to auto-generate globally-unique names; leave location/baseUrl/callbackKey blank to use defaults.",
+    "functionAppName": "",
+    "storageAccountName": "",
+    "keyVaultName": "",
+    "location": "",
+    "baseUrl": "",
+    "callbackKey": "",
+    "pollIntervalMs": 5000,
+    "executionTimeoutMs": 900000
+  },
+
+  "staticWebApp": {
+    "_comment": "Central host for the CCaaS web app + /api handoff Function. Free tier = $0. Leave name/location blank to auto-pick.",
+    "location": "",
+    "name": "",
+    "resourceGroup": "Zava-CCaaS-Demo",
+    "sku": "Free",
+    "appLocation": "apps/ccaas-agent-desktop",
+    "apiLocation": "apps/ccaas-agent-desktop/api",
+    "outputLocation": "apps/ccaas-agent-desktop/dist"
+  },
+
+  "appRegistration": {
+    "_comment": "OPTIONAL - only needed for unattended/app-only runs (created by Bootstrap-DemoServicePrincipal.ps1). For a normal interactive build leave these as-is. clientSecret is injected at deploy time, never committed.",
+    "displayName": "W365-Demo-Automation",
+    "clientId": "00000000-0000-0000-0000-000000000000",
+    "clientSecret": ""
+  },
+
+  "agentPool": {
+    "_comment": "MACHINE 1/2 - the AI agent's W365A Cloud PC pool (runs the legacy claims app). You create the pool; here you name the device group + scope tag. RECOMMENDED for W365A pools: run Enable-W365aPrereqs.ps1 -CreateDynamicGroup, set deviceGroupName to that dynamic CPCPool_* group's name, and leave pilotCloudPcName empty (membership auto-populates). OR use an assigned group and add Cloud PC device(s) by name in pilotCloudPcName. See docs/intune-w365.md.",
+    "deviceGroupName": "Zava-Demo-Agent-CPCs",
+    "scopeTagName": "Zava-Demo",
+    "pilotCloudPcName": []
+  },
+
+  "agentWorkstation": {
+    "_comment": "MACHINE 2/2 - the human agent's Cloud PC (gets only the CCaaS web link). Add the agent's user account to userGroupName, or seed names in agentUserName.",
+    "userGroupName": "Zava-Demo-Agent-Users",
+    "agentUserName": [],
+    "webLink": {
+      "displayName": "Zava Contact Center",
+      "url": ""
+    }
+  },
+
+  "foundry": {
+    "_comment": "Used when agentBackend is 'foundry' or 'both' (else leave as-is). The Foundry Computer-Use agent drives a Windows 365 for Agents Cloud PC via samples/foundry-w365a-runner.",
+    "_orchestratorUrl": "Desktop endpoint for the Foundry backend: the local-orchestrator paired with the W365A runner (the orchestrator serves HTTP and writes the file-drop; the runner watches it and drives the Cloud PC). Both run on/near the Cloud PC. Baked into the SPA as VITE_FOUNDRY_ORCHESTRATOR_URL so the backend toggle can switch to it. Leave blank to use the default http://localhost:4000.",
+    "endpoint": "https://<your-foundry-resource>.services.ai.azure.com/api/projects/<your-project>",
+    "orchestratorUrl": "",
+    "agentName": "Zava Claims Intake (CUA)",
+    "agentId": "",
+    "modelDeployment": "computer-use-preview",
+    "apiVersion": "2025-05-15-preview",
+    "tokenAudience": "https://ai.azure.com",
+    "accountResourceId": ""
+  }
+}

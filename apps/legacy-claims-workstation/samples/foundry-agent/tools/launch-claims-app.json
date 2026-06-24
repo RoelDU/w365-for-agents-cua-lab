@@ -1,0 +1,17 @@
+{
+  "type": "shell",
+  "name": "launch_claims_app",
+  "description": "Launch the pre-installed Zava Mutual Claims Workstation with the standard unattended demo flags. `claims.exe` is deployed to the W365A Cloud PC pool via Intune as a required Win32 app, so this tool only verifies the expected install path and starts it. Takes no data arguments: the agent drives the app purely on screen and receives the caller details in its run message, not via a file.",
+  "command": "powershell",
+  "args": [
+    "-NoProfile",
+    "-Command",
+    "$c=@((Join-Path $env:ProgramFiles 'Business Applications\\Zava Claims Workstation\\claims.exe'),'C:\\ZavaClaims\\claims.exe'); $f=$c | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $f) { throw \"claims.exe is not installed at any expected path: $($c -join ', ')\" }; Start-Process $f -ArgumentList '--no-splash','--fast-auth','--stable-host','--idle-timeout=0','--demo-pin=1234'"
+  ],
+  "_paths_note": "Prefers the normal Program Files install; falls back to the legacy C:\\ZavaClaims path.",
+  "parameters": {
+    "type": "object",
+    "required": [],
+    "properties": {}
+  }
+}

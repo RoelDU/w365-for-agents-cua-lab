@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://github.com/RoelDU/w365-for-agents-cua-lab#readme
+    about: Most questions are answered in the README, docs/demo-flow.md, and docs/BUILD.md.
+  - name: 💬 GitHub Discussions
+    url: https://github.com/RoelDU/w365-for-agents-cua-lab/discussions
+    about: For open-ended questions, ideas, and show-and-tell.
+  - name: 🔒 Security issue
+    url: https://github.com/RoelDU/w365-for-agents-cua-lab/security/advisories/new
+    about: Privately report a security vulnerability — DO NOT open a public issue for security.

@@ -1,0 +1,21 @@
+node_modules/
+dist/
+coverage/
+.vite/
+
+# Local env files (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Served runtime config with real tenant/endpoint values — keep ONLY the
+# .sample.json templates in the repo; copy to the real filename locally.
+public/entra-config.json
+public/region-config.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

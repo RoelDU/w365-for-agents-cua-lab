@@ -1,0 +1,6 @@
+{
+  "_README": "TEMPLATE. Copy to entra-config.json (gitignored) and fill with your Entra app registration. Served at runtime so sign-in config can change without a rebuild. Build-time VITE_AZURE_* vars act as fallback.",
+  "tenantId": "00000000-0000-0000-0000-000000000000",
+  "clientId": "00000000-0000-0000-0000-000000000000",
+  "redirectUri": "https://YOUR-APP.azurestaticapps.net/"
+}

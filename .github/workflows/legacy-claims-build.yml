@@ -1,0 +1,111 @@
+name: legacy-claims-build
+
+# Root-level CI for the legacy Claims Workstation (claims.exe).
+#
+# WHY THIS EXISTS: the app also carries apps/legacy-claims-workstation/.github/workflows/build.yml
+# so the folder stays portable as a standalone repo, but GitHub Actions only runs workflows from
+# the repository-root .github/workflows. That nested workflow therefore never executes in THIS
+# monorepo, so claims.exe was never built/signed/published by CI (#114). This root workflow makes
+# "build claims.exe in CI" real: it builds, optionally Authenticode-signs (cert-gated via repo
+# secrets), runs the embedded self-tests, and publishes the binary as both a workflow artifact and
+# a rolling "claims-latest" prerelease asset so it can be deployed to the SWA / Cloud PC with no
+# local build toolchain.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/legacy-claims-workstation/**'
+      - '.github/workflows/legacy-claims-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/legacy-claims-workstation/**'
+      - '.github/workflows/legacy-claims-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/legacy-claims-workstation
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show MinGW toolchain
+        run: |
+          which gcc || true
+          gcc --version || true
+          windres --version || true
+
+      - name: Build claims.exe
+        run: |
+          ./build.sh
+        env:
+          CC: gcc
+          WINDRES: windres
+
+      - name: Sign claims.exe (optional, durable fix for #114)
+        shell: pwsh
+        env:
+          CLAIMS_SIGN_PFX_BASE64: ${{ secrets.CLAIMS_SIGN_PFX_BASE64 }}
+          CLAIMS_SIGN_PASSWORD: ${{ secrets.CLAIMS_SIGN_PASSWORD }}
+        run: |
+          if (-not $env:CLAIMS_SIGN_PFX_BASE64) {
+            Write-Host "No CLAIMS_SIGN_PFX_BASE64 secret set; claims.exe stays UNSIGNED (#114). Add a code-signing cert (CLAIMS_SIGN_PFX_BASE64 + CLAIMS_SIGN_PASSWORD repo secrets) for the durable fix. The VERSIONINFO resource still ships and may be enough on its own."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'claims-sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CLAIMS_SIGN_PFX_BASE64))
+          $ts = 'http://timestamp.digicert.com'
+          $st = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' -ErrorAction SilentlyContinue |
+                Sort-Object FullName | Select-Object -Last 1
+          $signtool = if ($st) { $st.FullName } else { (Get-Command signtool -ErrorAction SilentlyContinue).Source }
+          if (-not $signtool) { Write-Error 'signtool not found on the runner'; exit 1 }
+          & $signtool sign /f $pfx /p $env:CLAIMS_SIGN_PASSWORD /fd SHA256 /tr $ts /td SHA256 claims.exe
+          if ($LASTEXITCODE -ne 0) { Remove-Item $pfx -Force; exit 1 }
+          & $signtool verify /pa claims.exe
+          $code = $LASTEXITCODE
+          Remove-Item $pfx -Force
+          if ($code -ne 0) { exit 1 }
+          Write-Host 'claims.exe signed and verified.'
+
+      - name: Run embedded tests
+        run: |
+          ./claims.exe --test
+
+      - name: Report version metadata
+        shell: pwsh
+        run: |
+          $vi = (Get-Item .\claims.exe).VersionInfo
+          "ProductName : $($vi.ProductName)"
+          "FileVersion : $($vi.FileVersion)"
+          "Signed      : $((Get-AuthenticodeSignature .\claims.exe).Status)"
+
+      - name: Upload claims.exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claims-exe
+          path: apps/legacy-claims-workstation/claims.exe
+          if-no-files-found: error
+
+      # On a push to main, publish the freshly built (and, when a cert is configured, signed)
+      # binary as a rolling prerelease so it has a stable download URL the SWA deploy / Cloud PC
+      # install can consume without a local build toolchain:
+      #   https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/claims-latest/claims.exe
+      - name: Publish rolling claims-latest release (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete claims-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create claims-latest claims.exe \
+            --prerelease \
+            --title "claims.exe (latest build)" \
+            --notes "Auto-published claims.exe from main ($GITHUB_SHA). Carries the #114 VERSIONINFO resource; signed when a code-signing cert is configured (CLAIMS_SIGN_PFX_BASE64 + CLAIMS_SIGN_PASSWORD repo secrets)."
