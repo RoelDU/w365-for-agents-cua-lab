@@ -20,6 +20,10 @@ the legacy system.** More CUA + W365A scenarios will be added over time.
      comment. GitHub uploads it and replaces this with a playable player.
      Then delete the "GitHub doesn't play..." sentence below. -->
 
+https://github.com/user-attachments/assets/10913efc-8abc-475b-8674-12b46245edfa
+
+
+
 
 A ~2.5 min guided walkthrough (English) covers the end-to-end call → hand-off → AI files the claim, the Copilot Studio configuration, and the Computer Use audit trail (screenshots + reasoning for every step). GitHub doesn't play repository-hosted videos inline, so **download it to watch:** [`docs/media/zava-ccaas-demo-guided-en.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-en.mp4?raw=1).
 
