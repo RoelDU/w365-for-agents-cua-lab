@@ -21,6 +21,15 @@ A ~2.5 min guided walkthrough (English): the end-to-end call → hand-off → AI
 
 > **Available in Japanese too.** The Agent Desktop UI switches between English and Japanese with the **EN / 日本語** toggle in the top bar (the AI agent also narrates in the selected language). Japanese walkthrough: [`docs/media/zava-ccaas-demo-guided-ja.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-ja.mp4?raw=1).
 
+### Want to stand this up yourself?
+
+1. **[How it works](#how-it-works)** — the architecture in 3 parts.
+2. **[Prerequisites](#prerequisites)** — what to have ready (tenant, Cloud PCs, Copilot Studio).
+3. **Deploy — pick one:**
+   - 🤖 **[Let an AI agent do it](#deploy-it-with-an-ai-agent-copilot)** (fastest — an agent like Microsoft Scout drives the portal/admin steps as you, with your review), or
+   - 🛠️ **[Deploy it yourself](#deploy-the-demo)** (one script + one config file).
+4. **[Test, reset, and tear down](#test-reset-and-tear-down)**.
+
 ---
 
 ## How it works
@@ -116,7 +125,38 @@ sight, reads the new **claim ID** off the screen → the result returns to the C
 
 ---
 
+## Deploy it with an AI agent (Copilot)
+
+**The fastest way to stand this up.** Several steps are portal/admin actions the scripts deliberately
+don't automate (Power Platform toggles, Copilot Studio settings, Intune checks, Entra app
+registrations). If you use an **AI desktop agent that can drive your browser and shell under your own
+signed-in session** — for example **Microsoft Scout** — you can hand most of these off and just review
+the result, instead of clicking through every blade yourself.
+
+> **Why it's safe.** The agent acts **as you**, in **your** already-signed-in browser and shell — it
+> never gets your password and has no standing admin credential of its own. You stay in the loop: it
+> shows you what it changed (with screenshots) and you do the final review. Think of it as a very fast
+> pair of hands, not an unattended service account.
+
+**How to use it:**
+
+1. Open this repo's folder in your AI desktop agent.
+2. Paste the ready-made prompt from **[`docs/setup-with-an-ai-agent.md`](docs/setup-with-an-ai-agent.md)**
+   (fill in your environment + agent names).
+3. The agent runs the build scripts and walks the portal toggles **with you**, pausing for your
+   review before each save.
+
+What an agent can and can't do (full table + the exact prompt) is in
+**[`docs/setup-with-an-ai-agent.md`](docs/setup-with-an-ai-agent.md)**. Money-spending or
+broad-blast-radius actions (billing, going public) stay explicit human decisions.
+
+Prefer to do it by hand? Continue with **[Deploy it yourself](#deploy-the-demo)** below.
+
+---
+
 ## Deploy the demo
+
+> Prefer to delegate the clicking? See **[Deploy it with an AI agent](#deploy-it-with-an-ai-agent-copilot)** above.
 
 One script (**[`scripts/Build-DemoFromScratch.ps1`](scripts/Build-DemoFromScratch.ps1)**) and
 one config file stand up everything else — in any tenant, subscription, or region. Nothing in
