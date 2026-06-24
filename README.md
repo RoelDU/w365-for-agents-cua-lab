@@ -13,19 +13,11 @@ the legacy system.** More CUA + W365A scenarios will be added over time.
 
 ## Demo
 
-![How the demo works — a call comes in, the human agent hands off to an AI agent, which uses a Windows 365 for Agents Cloud PC to file the claim in the legacy app with no API.](apps/ccaas-agent-desktop/docs/media/demo-flow.png)
-
-<!-- ⬇️ TO EMBED THE PLAYABLE VIDEO: click Edit (pencil), then DRAG the file
-     Zava-CCaaS-W365A-Demo-Guided-h264.mp4 onto the BLANK LINE just below this
-     comment. GitHub uploads it and replaces this with a playable player.
-     Then delete the "GitHub doesn't play..." sentence below. -->
+**▶ Watch the 2.5-minute demo video** (press play below):
 
 https://github.com/user-attachments/assets/10913efc-8abc-475b-8674-12b46245edfa
 
-
-
-
-A ~2.5 min guided walkthrough (English) covers the end-to-end call → hand-off → AI files the claim, the Copilot Studio configuration, and the Computer Use audit trail (screenshots + reasoning for every step). GitHub doesn't play repository-hosted videos inline, so **download it to watch:** [`docs/media/zava-ccaas-demo-guided-en.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-en.mp4?raw=1).
+A ~2.5 min guided walkthrough (English): the end-to-end call → hand-off → AI files the claim, the Copilot Studio configuration, and the Computer Use audit trail (screenshots + reasoning for every step).
 
 > **Available in Japanese too.** The Agent Desktop UI switches between English and Japanese with the **EN / 日本語** toggle in the top bar (the AI agent also narrates in the selected language). Japanese walkthrough: [`docs/media/zava-ccaas-demo-guided-ja.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-ja.mp4?raw=1).
 
