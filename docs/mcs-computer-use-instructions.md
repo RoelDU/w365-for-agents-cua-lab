@@ -157,10 +157,10 @@ What this establishes, and what it does not:
   not the text shown in it, and the service does not read the screenshot. The number is the one
   the agent stated while the dialog was on screen. The Foundry agent, by contrast, reads the
   dialog's claim field itself.
-- Of the eleven Computer use logs captured from the reference environment between 2 and 7 October
-  2026 (UTC), the ten in which the agent reported a claim all show this sequence, with the
-  number stated at the OK click; the one in which it reported no claim shows no Submit Claim
-  click.
+- The reference environment's captured Computer use logs from 2 to 7 October 2026 (UTC) cover
+  nine distinct sessions. The eight in which the agent reported a claim all show this sequence,
+  with the number stated at the OK click; the one in which it reported no claim shows no Submit
+  Claim click.
 - Keep the "Result" step above (read the number from the confirmation, then click OK) and the
   final-result wording unchanged, or update this check with them. A Submit made with the
   keyboard instead of a click is not recognised and ends as "outcome unknown".
