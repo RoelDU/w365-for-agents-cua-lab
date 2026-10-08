@@ -29,13 +29,17 @@
 
     Sign-in: either run Connect-MSIntuneGraph first, or pass -UseAzureCliToken to reuse
     the current Azure CLI sign-in (it needs DeviceManagementApps.ReadWrite.All and
-    Group.Read.All). Use -WhatIf to preview every tenant change.
+    Group.Read.All). -TenantId names the intended tenant; the script stops before any
+    Intune read if the sign-in belongs to another tenant. Use -WhatIf to preview every
+    tenant change.
 
 .EXAMPLE
-    pwsh -File .\scripts\Deploy-McsAgentShortcut.ps1 -Build -UseAzureCliToken -WhatIf
+    az login --tenant <tenant-id>
+    pwsh -File .\scripts\Deploy-McsAgentShortcut.ps1 -TenantId <tenant-id> -UseAzureCliToken -WhatIf
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
+    [string]$TenantId,
     [switch]$Build,
     [string]$PackagePath,
     [string]$AppDisplayName = 'Zava Claims Agent Launch Shortcut',
@@ -80,13 +84,16 @@ if ($Build -or $BuildOnly) {
     $WhatIfPreference = $tenantWhatIf
 }
 if ($BuildOnly) { return }
+if (-not ($TenantId -match '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')) {
+    throw 'Pass -TenantId <tenant-id> (the tenant whose Intune receives the shortcut app); the script refuses to guess it from the current sign-in.'
+}
 if (-not $PackagePath) { $PackagePath = Join-Path $repoRoot 'deploy\intune-packages\ZavaClaimsAgentShortcut.intunewin' }
 if (-not (Test-Path $PackagePath)) { throw "Package not found: $PackagePath (use -Build)." }
 
 Import-Module IntuneWin32App -MinimumVersion 1.4.0
 if ($UseAzureCliToken) {
-    $tok = az account get-access-token --resource-type ms-graph -o json | ConvertFrom-Json
-    if (-not $tok.accessToken) { throw 'Azure CLI returned no Microsoft Graph token. Sign in with az login first.' }
+    $tok = az account get-access-token --resource-type ms-graph --tenant $TenantId -o json | ConvertFrom-Json
+    if (-not $tok.accessToken) { throw "Azure CLI returned no Microsoft Graph token for tenant $TenantId. Sign in with: az login --tenant $TenantId" }
     $expires = [DateTimeOffset]::FromUnixTimeSeconds([int64]$tok.expires_on)
     $Global:AccessToken = [pscustomobject]@{ AccessToken = $tok.accessToken; ExpiresOn = $expires }
     $Global:AccessTokenTenantID = $tok.tenant
@@ -97,6 +104,9 @@ if ($UseAzureCliToken) {
     }
 }
 if (-not $Global:AuthenticationHeader) { throw 'Not signed in: run Connect-MSIntuneGraph first, or pass -UseAzureCliToken.' }
+if ([string]$Global:AccessTokenTenantID -ne $TenantId) {
+    throw "The sign-in is for tenant '$($Global:AccessTokenTenantID)', not the intended tenant $TenantId. Nothing was read or changed. Sign in to $TenantId (az login --tenant $TenantId, or Connect-MSIntuneGraph -TenantID $TenantId) and run again."
+}
 $auth = @{ Authorization = $Global:AuthenticationHeader['Authorization'] }
 
 $groups = @((Invoke-RestMethod -Headers $auth -Uri "$graph/groups?`$filter=displayName eq '$($GroupName -replace "'", "''")'&`$select=id,displayName,membershipRule").value)

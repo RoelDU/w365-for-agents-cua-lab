@@ -49,6 +49,15 @@ swa --version           # Azure Static Web Apps CLI, or use npx
 
 If a tool is missing, install it before continuing. The presenting package for Foundry does not need these tools; only the one-time installer does.
 
+Install the PowerShell modules the scripts use, once per administrator account. This changes
+only this computer:
+
+```powershell
+Install-Module Microsoft.Graph.Authentication, Microsoft.Graph.Applications, Microsoft.Graph.Groups -Scope CurrentUser
+Install-Module IntuneWin32App -MinimumVersion 1.4.0 -Scope CurrentUser
+Get-Module -ListAvailable Microsoft.Graph.Authentication, Microsoft.Graph.Applications, Microsoft.Graph.Groups, IntuneWin32App | Select-Object Name, Version   # check
+```
+
 A C compiler is **not** needed: the install uses the committed Claims package
 `deploy\intune-packages\ZavaClaims.intunewin`. Only someone who changes the Claims app's source
 and rebuilds the package (page 2, step 2.3) needs MinGW `gcc` and `windres` on `PATH`.

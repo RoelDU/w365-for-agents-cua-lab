@@ -58,12 +58,26 @@ first. The reference environment used Australia East.
      --deployment-name gpt-4.1-mini --query "{model:properties.model.name, version:properties.model.version, sku:sku.name, capacity:sku.capacity, state:properties.provisioningState}"
    ```
 
-3. Give the person who deploys the agent **Foundry User** on the project (it lets them create
+3. Create or choose the **container registry** that will hold the agent image. You build the
+   image from this repository into your own registry (step 5.3); no prebuilt image is
+   published and you need no access to anyone else's registry. A Basic registry has a small
+   monthly charge, and registry builds are billed per build time. Use the same subscription;
+   the region can match the project:
+
+   ```powershell
+   az acr create --name <registry> --resource-group <resource-group> --sku Basic --location <region>
+   az acr show --name <registry> --query "{name:name, loginServer:loginServer, state:provisioningState}"   # read-only check
+   ```
+
+   The second command must show `Succeeded`. Record `<registry>` in the worksheet; it is
+   `containerRegistryName` in step 5.2. If you use an existing registry, run only the check.
+4. Give the person who deploys the agent **Foundry User** on the project (it lets them create
    hosted agent versions; older pages call it **Azure AI User**), and **Contributor** on the
-   container registry so `az acr build` can run a registry build and push the image.
-4. Let the project pull the image: give the **project's** managed identity **Container
+   registry from item 3 so `az acr build` can run a registry build and push the image.
+5. Let the project pull the image from that registry: give the **project's** managed identity **Container
    Registry Repository Reader** on the registry (or **AcrPull** if the registry does not use
-   repository permissions). The hosted agent definition does not name a registry connection;
+   repository permissions). The registry must exist first (item 3): the commands read its ID.
+   The hosted agent definition does not name a registry connection;
    do not add `registry_connection_id` (see the sample README). The reference project also has a
    container-registry project connection; it is not used by this definition and is not known to
    be required.
@@ -150,7 +164,7 @@ Placeholder reference:
 | `tenantId` | Microsoft Entra tenant ID. | Values worksheet. |
 | `subscriptionId` | Azure subscription ID. | Values worksheet. |
 | `resourceGroup` | Resource group that holds the container registry. | Values worksheet or your Azure plan. |
-| `containerRegistryName` | Azure Container Registry name, without `.azurecr.io`. | Azure resource you create or choose. |
+| `containerRegistryName` | Azure Container Registry name, without `.azurecr.io`. | Step 5.1.1, item 3. |
 | `imageRepository` / `imageTag` | Repository and tag to build, for example `claims-w365:v1`. | Choose before building the image. |
 | `imageDigest` | Image digest such as `sha256:...`. | Leave blank. `-BuildImage` writes the built digest here; the later steps read it from this file. |
 | `foundryProjectEndpoint` / `https://<account>.services.ai.azure.com/api/projects/<project>` | Foundry project endpoint. | Foundry project overview. |
@@ -161,14 +175,7 @@ Placeholder reference:
 
 ## 5.3 Build the container image
 
-You build the image from this repository into **your own** Azure Container Registry. No
-prebuilt image is published, and you do not need access to anyone else's registry. If you do
-not have a registry yet, create one (a Basic registry has a small monthly charge, and registry
-builds are billed per build time):
-
-```powershell
-az acr create --name <registry> --resource-group <resource-group> --sku Basic --location <region>
-```
+The registry was created or chosen in step 5.1.1, item 3, and the project can already pull from it (item 5).
 
 Plan first:
 

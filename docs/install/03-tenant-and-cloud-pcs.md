@@ -13,9 +13,14 @@ Microsoft Dataverse reference: <https://learn.microsoft.com/en-us/power-platform
 
 ## 2.2 Prepare tenant prerequisites for Copilot Studio Cloud PC pools
 
+Install the local PowerShell modules first (page 0, "Local tools"). If one is missing, the
+script installs it for the current user even in a `-WhatIf` preview, because without it the
+preview cannot sign in; that is a change to this computer only, never to the tenant.
+
 The script parameters were checked with `Get-Command .\scripts\Enable-W365aPrereqs.ps1`. It supports `-TenantId`, `-CreateDynamicGroup`, `-DeviceCode`, and `-WhatIf`.
 
-Preview first:
+Preview first. It signs in to `<tenant-id>` as the administrator, reads the current settings and
+lists what it would change, ending with "Preview only: nothing in the tenant was changed":
 
 ```powershell
 pwsh -File .\scripts\Enable-W365aPrereqs.ps1 -TenantId <tenant-id> -CreateDynamicGroup -WhatIf
@@ -89,9 +94,16 @@ never reports installed before Claims is. The script uses the current Azure CLI 
 `-UseAzureCliToken`, or an existing `Connect-MSIntuneGraph` session:
 
 ```powershell
-pwsh -File .\scripts\Deploy-McsAgentShortcut.ps1 -UseAzureCliToken -WhatIf
-pwsh -File .\scripts\Deploy-McsAgentShortcut.ps1 -UseAzureCliToken
+az login --tenant <tenant-id>
+az account show --query tenantId -o tsv   # must print <tenant-id>
+pwsh -File .\scripts\Deploy-McsAgentShortcut.ps1 -TenantId <tenant-id> -UseAzureCliToken -WhatIf
+pwsh -File .\scripts\Deploy-McsAgentShortcut.ps1 -TenantId <tenant-id> -UseAzureCliToken
 ```
+
+`-TenantId` is required. The script asks the Azure CLI for a token for that tenant and stops
+before reading or changing anything in Intune if the sign-in belongs to another tenant. The
+Azure CLI sign-in needs Intune Administrator (it uses `DeviceManagementApps.ReadWrite.All` and
+`Group.Read.All`).
 
 An existing shortcut app is not re-uploaded: it keeps the detection it was created with, and a
 rerun only adds the missing Claims dependency or assignment. To check it read-only, run the

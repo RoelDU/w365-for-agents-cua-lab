@@ -22,7 +22,7 @@ Copy this table into your private notes. Do not commit the filled-in values.
 | Foundry resource, project, region | Foundry (5.1.1) | Every Foundry command; chosen explicitly, never another existing project. |
 | Foundry project endpoint | Foundry | Deploy hosted agent versions and set relay target. |
 | Model deployment name | Foundry (5.1.1) | `AZURE_AI_MODEL_DEPLOYMENT_NAME`; default `gpt-4.1-mini`. |
-| Container registry name | Foundry (5.3) | `containerRegistryName`; your own registry, built from this repository. |
+| Container registry name | Foundry (5.1.1, item 3) | `containerRegistryName`; your own registry, built from this repository. |
 | Image digest | Foundry (5.3) | Written into `foundry-agent.local.json` by `-BuildImage`; pins the hosted version. |
 | Foundry hosted agent name | Foundry | Default: `claims-w365`; used by the deploy script. |
 | Foundry Invocations endpoint URL | Foundry | Function setting `FOUNDRY_INVOCATIONS_URL`. |

@@ -68,8 +68,10 @@ if ($CreateDynamicGroup) { $requiredModules += "Microsoft.Graph.Groups" }
 
 foreach ($module in $requiredModules) {
     if (-not (Get-Module -ListAvailable -Name $module)) {
-        Write-Host "Installing $module ..."
-        Install-Module $module -Scope CurrentUser -Force -AllowClobber
+        # A local tool, not a tenant change, so it is installed even in a -WhatIf preview;
+        # otherwise the preview cannot sign in. Install guide page 0 lists it to install first.
+        Write-Host "Installing local PowerShell module $module (CurrentUser) ..."
+        Install-Module $module -Scope CurrentUser -Force -AllowClobber -WhatIf:$false
     }
 }
 
@@ -164,7 +166,11 @@ try {
     }
 
     Write-Host ""
-    Write-Host "==================== W365A prerequisites configured ====================" -ForegroundColor Green
+    if ($WhatIfPreference) {
+        Write-Host "==================== Preview only: nothing in the tenant was changed ====================" -ForegroundColor Green
+    } else {
+        Write-Host "==================== W365A prerequisites configured ====================" -ForegroundColor Green
+    }
     Write-Host "Done (automatable parts). Remaining MANUAL gates for the Copilot Studio path:" -ForegroundColor Yellow
     Write-Host "  - Create the Cloud PC pool: agent -> Computer Use tool -> Machines -> Cloud PC pool -> Add new." -ForegroundColor Yellow
     Write-Host "      Name it 'Zava Claims Agent Pool'. The backing object will appear with a platform-generated" -ForegroundColor Yellow
