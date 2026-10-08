@@ -14,7 +14,15 @@ Use this page as a short reference. The ordered install steps are in [`install\0
 
 ## Billing
 
-Windows 365 for Agents billing is separate from Copilot Studio entitlement. Use pay-as-you-go billing and choose whether to keep always-available Cloud PCs for demo reliability.
+Windows 365 for Agents billing is separate from Copilot Studio entitlement, and the two pools are
+billed through different routes:
+
+- **Copilot Studio (MCS) pool:** a pay-as-you-go billing plan for the Power Platform environment.
+  Microsoft documents automatic scaling for these pools but no always-available setting.
+- **Windows 365 for Agents (Foundry) pool:** a billing policy in the Microsoft 365 admin center;
+  the Intune provisioning policy (agents) sets how many Cloud PCs are always available.
+
+Details and trial limits: [prerequisites, section 0.1](install/01-prerequisites.md#01-products-licences-and-billing-to-have-before-you-start).
 
 Microsoft reference: <https://learn.microsoft.com/en-us/windows-365/agents/billing-w365a>
 

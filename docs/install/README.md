@@ -6,7 +6,7 @@ This is the single starting point for installing the lab in your own tenant. Fol
 
 | Step | Page | What you finish with |
 | --- | --- | --- |
-| 0 | [Prerequisites](01-prerequisites.md) | Licences, roles, tools, and public Microsoft references checked. |
+| 0 | [Prerequisites](01-prerequisites.md) | Every product, licence, billing plan, Microsoft Entra and Intune setting, role and tool for both paths checked, and the open questions read. |
 | 1 | [Values worksheet](02-values-worksheet.md) | A safe place to record non-secret IDs and URLs as you create them. |
 | 2 | [Tenant, Intune, and Cloud PC pools](03-tenant-and-cloud-pcs.md) | Dataverse environment, Cloud PC pool prerequisites and dynamic device group, Claims app assigned to the MCS pool devices (committed package), Foundry Cloud PC pool (done after page 5), and optional ESP skip plan. |
 | 3 | [Azure resources and app registrations](04-azure-and-identity.md) | Function app, storage, managed identity, Static Web App (resource-only bootstrap, no agent deployment), Zava sign-in app, relay API scope with v2 access tokens, and presenter desktop icon. |

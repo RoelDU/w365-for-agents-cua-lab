@@ -68,8 +68,12 @@ Manual portal step.
 3. Require authentication. Computer Use is disabled for unauthenticated agents.
 4. Add a **Computer Use** tool. In its **Machines** setting choose **Cloud PC pool** and create
    the MCS pool:
-   - use a paid Windows 365 for Agents plan for a durable demo;
-   - keep at least one always-available Cloud PC if the demo must avoid cold starts;
+   - billing: a tenant can create up to two Cloud PC pools without a Windows 365 for Agents
+     billing plan and gets 50 free hours for published agents running autonomously, which is how
+     this lab runs; after that the environment needs its pay-as-you-go billing plan (page 0,
+     section 0.1);
+   - Microsoft documents automatic scaling for these pools (up to 10 Cloud PCs) but no
+     always-available setting, so a run can still have to wait for a newly prepared Cloud PC;
    - record the machine group or pool ID for the worksheet.
 
    Provisioning can take about 30 minutes. These Cloud PCs show the model name **Copilot Studio

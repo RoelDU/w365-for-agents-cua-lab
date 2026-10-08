@@ -8,6 +8,9 @@ Manual portal step.
 2. Create or choose an environment that has a Dataverse database.
 3. Keep the environment in the geography where you want the MCS Cloud PC pool to run. Copilot Studio Cloud PC pools are hosted in the same geography as the Power Platform environment.
 4. Enable Copilot Studio Computer Use for the environment.
+5. If you keep the reference configuration's Anthropic models, have an administrator allow
+   external models first: in the Microsoft 365 admin center, then for this environment in the
+   Power Platform admin center (page 0, section 0.2).
 
 Microsoft Dataverse reference: <https://learn.microsoft.com/en-us/power-platform/admin/create-database>
 
@@ -32,7 +35,11 @@ When the tenant owner approves the changes, run without `-WhatIf`:
 pwsh -File .\scripts\Enable-W365aPrereqs.ps1 -TenantId <tenant-id> -CreateDynamicGroup
 ```
 
-This prepares the Microsoft Entra and Intune prerequisites described in the Copilot Studio Cloud PC pool documentation, including Windows MDM enrolment, Microsoft Entra authentication for RDP, and a dynamic device group rule for `CPCPool_` devices.
+This turns on Microsoft Entra authentication for RDP, creates the dynamic device group for
+`CPCPool_` devices and hides the remote desktop consent prompt for it, as described in the
+Copilot Studio Cloud PC pool documentation. It does **not** set the Intune enrolment
+restriction: make sure Windows (MDM) corporate enrolment is allowed yourself (page 0, section
+0.2). The dynamic group needs Microsoft Entra ID P1.
 
 ## 2.3 Claims app package (nothing to build)
 
