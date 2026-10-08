@@ -10,6 +10,7 @@ import { useHandoffStore } from "@/stores/useHandoffStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import type { CallContext } from "@/types/contracts";
 import { SAMPLE_AGENT } from "./fixtures/agent";
+import { resetTransferRecorderForTests } from "@/lib/handoffRecovery";
 
 // These routing tests run as a build that names a local Foundry orchestrator.
 vi.mock("@/stores/useSettingsStore", async (importOriginal) => ({
@@ -23,6 +24,9 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 beforeEach(() => {
+  // Each test starts as a fresh tab: no transfer record left by the previous test.
+  sessionStorage.clear();
+  resetTransferRecorderForTests();
   useAuthStore.setState({ agent: SAMPLE_AGENT });
   useSettingsStore.setState({
     backend: "foundry",

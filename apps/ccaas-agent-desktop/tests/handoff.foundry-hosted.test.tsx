@@ -1075,3 +1075,95 @@ describe("Foundry result correlation and submission uncertainty (mock HTTP, not 
     await expectUnresolved();
   });
 });
+
+// Release QA follow-up R5 (9 Oct 2026): a Foundry claim that may have been filed must also stop a
+// new standard Copilot Studio (MCS) transfer: switching backend, resetting or reloading is not
+// proof that nothing was filed. Only the existing "I checked the claims system" clears it.
+describe("an uncertain Foundry request blocks every claim-capable destination (mock HTTP, not live proof)", () => {
+  function uncertainFoundryThenMcs() {
+    const counts = { foundryStarts: 0, mcsStarts: 0 };
+    server.use(
+      available(true),
+      http.post(`${API}/foundry-claims/start`, () => {
+        counts.foundryStarts += 1;
+        return HttpResponse.json({ events: [], computer: null, outcome: null, release: null }, { status: 202 });
+      }),
+      http.post(`${API}/foundry-claims/status`, async ({ request }) => {
+        const body = await request.json() as { request_id: string };
+        const outcome = ev(1, "outcome", { request_id: body.request_id, status: "error", submit_sent: true, release_status: "accepted",
+          result: { request_id: body.request_id, status: "error", error_code: "UNKNOWN", message: "No matching fresh submission confirmation is visible; success is unverified.", timestamp: "2026-10-09T00:00:00Z" } });
+        return HttpResponse.json({ events: [outcome], computer: null, outcome, release: null, running: false, interrupted: false });
+      }),
+      http.post(`${API}/cua-run`, () => {
+        counts.mcsStarts += 1;
+        return HttpResponse.json({ runId: "mcs-after" });
+      }),
+      http.get(`${API}/cua-run/mcs-after/progress`, () => HttpResponse.json({ status: "running", steps: [] }))
+    );
+    return counts;
+  }
+
+  async function reload() {
+    cleanup();
+    useHandoffStore.getState().reset();
+    resetTransferRecorderForTests();
+    render(<TooltipProvider><RightRail /></TooltipProvider>);
+    await screen.findByTestId("previous-transfer");
+  }
+
+  it("keeps standard MCS closed after reset and reload, by hand and in unattended mode", async () => {
+    const counts = uncertainFoundryThenMcs();
+    fireEvent.click(await openFoundry());
+    await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    fireEvent.click(screen.getByTestId("handoff-fallback"));
+    window.dispatchEvent(new CustomEvent("ccaas:reset-demo"));
+    await reload();
+
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    const mcs = await screen.findByTestId("handoff-to-ai-mcs");
+    await waitFor(() => expect(mcs).toBeDisabled());
+    expect(screen.getByTestId("handoff-mcs-availability")).toHaveTextContent(/may already have filed a claim/);
+    fireEvent.click(mcs);
+    expect(screen.queryByTestId("handoff-confirm")).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    // Unattended mode picks and confirms the selected destination by itself.
+    useSettingsStore.setState({ backend: "mcs", cuaMode: true });
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(screen.queryByTestId("handoff-confirm")).toBeNull();
+    expect(counts.mcsStarts).toBe(0);
+    expect(counts.foundryStarts).toBe(1);
+    expect(JSON.parse(sessionStorage.getItem("ccaas:last-transfer") ?? "null")).toMatchObject({ backend: "foundry", state: "stopped" });
+  }, 15000);
+
+  it("refuses an MCS start whose confirmation was already open when the Foundry request became uncertain", async () => {
+    const counts = uncertainFoundryThenMcs();
+    render(<TooltipProvider><RightRail /></TooltipProvider>);
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    fireEvent.click(await screen.findByTestId("handoff-to-ai-mcs"));
+    const confirm = await screen.findByTestId("handoff-confirm");
+    useRecoveryStore.setState({ record: {
+      request_id: "REQ-2026-121212121212", backend: "foundry", state: "stopped", message: "A claim may have been filed.",
+      started_at: "2026-10-09T00:00:00.000Z", updated_at: "2026-10-09T00:00:01.000Z"
+    } });
+    fireEvent.click(confirm);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(counts.mcsStarts).toBe(0);
+  });
+
+  it("allows a normal MCS transfer again after 'I checked the claims system'", async () => {
+    const counts = uncertainFoundryThenMcs();
+    fireEvent.click(await openFoundry());
+    await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    fireEvent.click(screen.getByTestId("handoff-fallback"));
+    await reload();
+    fireEvent.click(within(screen.getByTestId("previous-transfer")).getByTestId("previous-transfer-acknowledge"));
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    const mcs = await screen.findByTestId("handoff-to-ai-mcs");
+    await waitFor(() => expect(mcs).not.toBeDisabled());
+    fireEvent.click(mcs);
+    fireEvent.click(await screen.findByTestId("handoff-confirm"));
+    await waitFor(() => expect(counts.mcsStarts).toBe(1));
+  }, 12000);
+});

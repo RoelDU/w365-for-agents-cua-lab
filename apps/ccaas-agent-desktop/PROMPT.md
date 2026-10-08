@@ -293,7 +293,7 @@ real-time state:
 | `ready` | yellow dot + "AI agent is now driving the claims system" | app-level checkpoint from the Foundry/Computer-Use flow |
 | `submitted` | green dot + claim ID prominently displayed + reserve amount + adjuster + "Confirm with caller and dispose the call" | Foundry run completed and `/api` parsed the result |
 | `error` | red dot + error code + message + **Retry** / **Fall back to manual** buttons | `/api` mapped a failed/expired/cancelled run or a request error |
-| `error` (outcome unknown) | "STOPPED - OUTCOME UNKNOWN" + message + **Fall back to manual** only, no **Retry** | A claim may or may not have been filed: the Foundry agent may have sent Submit (`submit_sent` true or not reported), its result does not belong to this request, or `/api/cua-run` returned `outcome: "uncertain"`. The request stays as the last transfer through reset and reload, and no new transfer to that destination starts until the person selects "I checked the claims system" (an uncertain Copilot Studio request also blocks Foundry). |
+| `error` (outcome unknown) | "STOPPED - OUTCOME UNKNOWN" + message + **Fall back to manual** only, no **Retry** | A claim may or may not have been filed: the Foundry agent may have sent Submit (`submit_sent` true or not reported), its result does not belong to this request, or `/api/cua-run` returned `outcome: "uncertain"`. The request stays as the last transfer through reset and reload, and no new AI transfer to any destination (Copilot Studio, Foundry or the experimental new harness) starts until the person selects "I checked the claims system". |
 
 State updates are obtained by **polling**
 `GET /handoff/:request_id/status?thread_id=...&run_id=...` every 1.5 seconds.

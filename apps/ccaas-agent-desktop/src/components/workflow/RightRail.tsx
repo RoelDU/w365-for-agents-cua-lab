@@ -265,6 +265,8 @@ export function RightRail() {
   // Selecting an AI agent destination advances to the handover confirmation.
   // MCS and Foundry are separate destinations; the choice decides the route.
   const selectAiDestination = React.useCallback((target: AgentBackend) => {
+    // One unresolved request per interaction: no claim-capable destination opens until it is reconciled.
+    if (isUnresolved(useRecoveryStore.getState().record)) return;
     const settings = useSettingsStore.getState();
     if (settings.backend !== target) settings.setBackend(target);
     setDirectoryOpen(false);
@@ -734,6 +736,8 @@ export function RightRail() {
   const submitHandoff = React.useCallback(
     async (summary: string) => {
       if (!scenario || !agent) return;
+      // Every route below can file a claim: none starts while an earlier request may have.
+      if (isUnresolved(useRecoveryStore.getState().record)) return;
 
       // New-harness path: the separate experimental Copilot Studio agent, only
       // through its isolated relay. It always returns here, so it can never fall
@@ -944,9 +948,9 @@ export function RightRail() {
       // browser-direct Direct Line stream returns nothing under MS auth), and it
       // preserves the Activity / Session-replay audit trail.
       if (backend === "mcs" && cuaRunBaseUrl) {
-        // Backstop: never a new MCS transfer while an earlier one may have filed a claim.
-        const pending = useRecoveryStore.getState().record;
-        if (isUnresolved(pending) && pending?.backend === "mcs") return;
+        // Backstop: never a new MCS transfer while an earlier request (from any destination)
+        // may have filed a claim.
+        if (isUnresolved(useRecoveryStore.getState().record)) return;
         const effectiveSummary = summary || scenario.summary_seed;
         const ctx = buildCallContext({
           scenario,
@@ -1427,7 +1431,7 @@ export function RightRail() {
           cuaMode={cuaMode}
           foundry={foundryDestination}
           newHarness={newHarnessDestination}
-          mcs={transferRecord && isUnresolved(transferRecord) && transferRecord.backend === "mcs"
+          mcs={transferRecord && isUnresolved(transferRecord)
             ? { enabled: false, message: t("dir.possiblyFiled", { id: transferRecord.request_id }) }
             : { enabled: true, message: null }}
         />

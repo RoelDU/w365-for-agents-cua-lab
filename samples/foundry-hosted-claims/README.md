@@ -445,8 +445,9 @@ the shared result/error contract for Claims. Smoke never claims a business resul
 `status.outcome.submit_sent` says whether this run sent Submit Claim. Zava shows a claim only
 when `outcome.result.request_id` is the transfer's own request ID and the result matches the
 shared contract. After an error with `submit_sent` true or missing (an older agent, unless its
-error event's `context.submit_sent` is false), Zava keeps the request unresolved and offers no
-Retry until a person confirms they checked the claims system.
+error event's `context.submit_sent` is false), Zava keeps the request unresolved: no Retry, and no
+new AI transfer to any destination (Copilot Studio included) until a person confirms they
+checked the claims system.
 
 ### Local viewer: start, preflight and failures
 

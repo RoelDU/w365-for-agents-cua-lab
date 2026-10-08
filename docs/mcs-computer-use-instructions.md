@@ -139,7 +139,7 @@ previously"), asked about, planned or quoted in a condition or history note ("If
 | One claim in the completion line | `succeeded` with that claim number | Shows the claim. |
 | "Filing failed: CODE" | `failed` | Shows the code; Retry offered. |
 | Reply without Computer Use, after the grace period | `failed` | Not filed; Retry offered. |
-| Anything else that ended: uncertain reply, conflicting claims, wrong conversation, a session that ended without the line | `failed` with `outcome: "uncertain"` | "STOPPED - OUTCOME UNKNOWN", no Retry. The request stays as the last transfer through reset and reload, and no new Copilot Studio or Foundry transfer starts until someone selects "I checked the claims system". |
+| Anything else that ended: uncertain reply, conflicting claims, wrong conversation, a session that ended without the line | `failed` with `outcome: "uncertain"` | "STOPPED - OUTCOME UNKNOWN", no Retry. The request stays as the last transfer through reset and reload, and no new AI transfer to any destination starts until someone selects "I checked the claims system". An uncertain Foundry request blocks Copilot Studio transfers the same way. |
 
 The line is the agent's own statement, read from its reply or log. Unlike the Foundry agent,
 which reads the confirmation dialog itself, this path does not independently read the Claims
