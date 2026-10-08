@@ -402,6 +402,10 @@ export function RightRail() {
   }, [directoryOpen, newHarnessBaseUrl]);
 
   const newHarnessDestination = React.useMemo(() => {
+    // Another Copilot Studio agent that can file a claim: not while an earlier one may have.
+    if (transferRecord && isUnresolved(transferRecord)) {
+      return { enabled: false, message: t("dir.possiblyFiled", { id: transferRecord.request_id }) };
+    }
     switch (newHarnessAvailability.mode) {
       case "unconfigured":
         return { enabled: false, message: t("dir.newHarnessNotConfigured") };
@@ -412,7 +416,7 @@ export function RightRail() {
       case "unknown":
         return { enabled: false, message: t("dir.newHarnessUnknown", { detail: newHarnessAvailability.detail }) };
     }
-  }, [newHarnessAvailability, t]);
+  }, [newHarnessAvailability, transferRecord, t]);
 
   const foundryHosted = backend === "foundry" && !!cuaRunBaseUrl && foundryAvailability.mode === "hosted";
   const excerptChars = foundryHosted || backend === "mcs-new-harness" ? FOUNDRY_HOSTED_EXCERPT_CHARS : DEFAULT_EXCERPT_CHARS;
@@ -745,6 +749,8 @@ export function RightRail() {
           return;
         }
         if (useHandoffStore.getState().status !== "idle") return;
+        // Backstop: never a new claim run while an earlier request may have filed one.
+        if (isUnresolved(useRecoveryStore.getState().record)) return;
         const ctx = buildCallContext({
           scenario,
           agent,

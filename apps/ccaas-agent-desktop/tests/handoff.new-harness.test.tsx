@@ -9,6 +9,7 @@ import { useCallStore } from "@/stores/useCallStore";
 import { useHandoffStore } from "@/stores/useHandoffStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { SAMPLE_AGENT } from "./fixtures/agent";
+import { resetTransferRecorderForTests } from "@/lib/handoffRecovery";
 
 vi.mock("@/lib/msalLogin", () => ({
   acquireHandoffAccessToken: vi.fn(async () => "user-token")
@@ -197,4 +198,24 @@ describe("third destination: MCS new harness (mock HTTP, not live proof)", () =>
     await new Promise((r) => setTimeout(r, 2500));
     expect(cancels).toHaveLength(1);
   }, 10000);
+});
+
+// Spec re-check of release QA R6 (8 Oct 2026): this destination is another Copilot Studio agent
+// that can file a claim, so it is blocked like the others while an earlier request may have.
+describe("new harness while an earlier request may have filed a claim (mock HTTP, not live proof)", () => {
+  it.each(["mcs", "foundry"])("is not offered while a %s request is unresolved", async (backend) => {
+    sessionStorage.setItem("ccaas:last-transfer", JSON.stringify({
+      request_id: "REQ-2026-777788889999", backend, state: "stopped", message: "A claim may or may not have been filed.",
+      started_at: "2026-10-08T07:02:00.000Z", updated_at: "2026-10-08T07:02:01.000Z",
+      handoff: { request_id: "REQ-2026-777788889999", target_backend: backend, summary: "s" }
+    }));
+    resetTransferRecorderForTests();
+    server.use(...standardRoutes(), nhAvailable(true));
+    render(<TooltipProvider><RightRail /></TooltipProvider>);
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    const nh = await screen.findByTestId("handoff-to-ai-mcs-new-harness");
+    await waitFor(() => expect(screen.getByTestId("handoff-new-harness-availability")).toHaveTextContent(/may already have filed a claim/));
+    expect(nh).toBeDisabled();
+    expect(standardCalls).toBe(0);
+  });
 });
