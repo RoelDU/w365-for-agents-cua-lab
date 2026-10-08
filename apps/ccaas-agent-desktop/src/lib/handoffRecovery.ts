@@ -107,10 +107,10 @@ export interface TransferRecord {
 
 /**
  * A transfer that may have filed a claim and has no known outcome. While one
- * exists, no new transfer to that destination (and no new Foundry start) is offered
- * for this tab, and no other transfer replaces its record. For Foundry this is any
- * request that may have started; for Copilot Studio (MCS) it is a run the handoff
- * service reported as uncertain ("stopped" here).
+ * exists, no new AI transfer to any destination starts in this tab, and no other
+ * transfer replaces its record. For Foundry this is any request that may have
+ * started; for Copilot Studio (MCS) it is a run the handoff service reported as
+ * uncertain ("stopped" here).
  */
 export function isUnresolved(record: TransferRecord | null | undefined): boolean {
   if (!record) return false;

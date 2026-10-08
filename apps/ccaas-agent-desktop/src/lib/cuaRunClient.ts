@@ -173,6 +173,7 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
   const maxMs = opts.maxDurationMs ?? 16 * 60 * 1000;
   const { onUpdate, signal } = opts;
   let claimed = false;
+  let claimedId = "";
   let renderedThrough = -1; // highest step index already pushed to the UI
   let lastActivity = "";
   let lastRelease = "";
@@ -228,6 +229,7 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
 
       if (prog.claimId && !claimed) {
         claimed = true;
+        claimedId = prog.claimId;
         onUpdate({ type: "claim", claimId: prog.claimId });
       }
 
@@ -242,13 +244,21 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
         const releasePending = prog.release?.state === "pending";
         done = !releasePending || Date.now() - succeededAt >= RELEASE_FOLLOW_UP_MS;
       } else if (prog.status === "failed") {
-        // A claim already confirmed for this run stays: a later failed read is about the
-        // Cloud PC release follow-up, not about the claim. Stop following it.
+        // A claim already confirmed for this run keeps its number. A later failed read (a
+        // reply that disagrees, or a service restart) is shown as a warning, not dropped.
         if (!claimed) {
           onUpdate({
             type: "error",
             errorMessage: prog.errorMessage || "The AI run did not complete successfully.",
             ...(prog.outcome === "uncertain" ? { uncertain: true } : {})
+          });
+        } else {
+          onUpdate({
+            type: "activity",
+            activity: {
+              state: "unavailable",
+              message: `A later check of ${claimedId} could not confirm it: ${prog.errorMessage || "the run's result could not be read."}`
+            }
           });
         }
         done = true;

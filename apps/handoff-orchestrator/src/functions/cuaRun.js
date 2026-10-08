@@ -283,8 +283,9 @@ async function liveProgress(run, runId) {
 
   let activity;
   let shown = [];
+  // The receipt on this row names the conversation; only that conversation's own log counts.
+  const owned = receipt ? sessions.filter((s) => conversationOf(s) === receipt.conversationId) : [];
   if (receipt) {
-    const owned = sessions.filter((s) => conversationOf(s) === receipt.conversationId);
     if (run.boundConversation && run.boundConversation !== receipt.conversationId) {
       activity = { state: "mismatch", message: "The activity shown did not belong to this handoff's conversation and has been withdrawn." };
     } else if (owned.length) {
@@ -292,7 +293,6 @@ async function liveProgress(run, runId) {
       shown = owned;
       activity = { state: "verified", conversationId: receipt.conversationId };
     } else {
-      run.unownedSince = run.unownedSince || Date.now();
       activity = { state: "unavailable", message: "No Computer Use activity log was found for this handoff's conversation." };
     }
   } else if (run.boundConversation) {
@@ -316,8 +316,6 @@ async function liveProgress(run, runId) {
 
   if (requireRealResult) {
     if (!receipt) return { status: "running", steps, activity, release, claimId: null };
-    // The receipt on this row names the conversation; only that conversation's own log counts.
-    const owned = sessions.filter((s) => conversationOf(s) === receipt.conversationId);
     const evidence = submissionEvidence(owned.flatMap((s) => run.logs[s.flowsessionid].rows));
     return { ...realResult(run, receipt, evidence, owned), steps, activity, release };
   }
@@ -365,6 +363,14 @@ function submissionEvidence(rows) {
       submitted = controls.includes(SUBMIT_CLAIM);
       continue;
     }
+    // Another Submit before any confirmation: the earlier one created nothing on screen,
+    // so everything said so far is "before" this Submit.
+    if (controls.includes(SUBMIT_CLAIM) && !controls.some((c) => CONFIRMATION_DIALOG.has(c))) {
+      named.forEach((id) => before.add(id));
+      atConfirmation.forEach((id) => before.add(id));
+      atConfirmation.clear();
+      continue;
+    }
     named.forEach((id) => atConfirmation.add(id));
     if (controls.some((c) => CONFIRMATION_DIALOG.has(c))) {
       confirmed = true;
@@ -386,17 +392,16 @@ function submissionEvidence(rows) {
 /**
  * The result of a real-result run from this row's receipt and its conversation's log.
  * Succeeded only with submission evidence; the agent's reply, if any, must name the same
- * claim. Once established, the claim is kept even if the Cloud PC session later fails.
+ * claim. The answer is worked out afresh from the row and the log on every read, so every
+ * service instance gives the same one; the Cloud PC session's own end state never changes it.
  * A run that clicked Submit is never reported as a definite (retryable) failure.
  */
 function realResult(run, receipt, evidence, owned) {
-  if (run.confirmedClaim) return { status: "succeeded", claimId: run.confirmedClaim };
   const ended = owned.length > 0 && owned.every((s) => s.completedon);
   if (evidence.claimId) {
     if (receipt.reply !== "none" && !(receipt.reply === "filed" && receipt.claimId === evidence.claimId)) {
       return uncertain(`This run's confirmation shows claim ${evidence.claimId}, but the agent's reply does not report that claim as filed.`);
     }
-    run.confirmedClaim = evidence.claimId;
     return { status: "succeeded", claimId: evidence.claimId };
   }
   if (evidence.conflict) return uncertain(evidence.conflict);
@@ -415,9 +420,10 @@ function realResult(run, receipt, evidence, owned) {
     };
   }
   // The agent has replied but no Computer Use session ever appeared for its conversation.
+  // The grace period counts from the first read that saw the reply.
   if (!owned.length && receipt.replied) {
-    run.unownedSince = run.unownedSince || Date.now();
-    if (Date.now() - run.unownedSince < noActivityGraceMs()) return { status: "running", claimId: null };
+    run.repliedUnownedSince = run.repliedUnownedSince || Date.now();
+    if (Date.now() - run.repliedUnownedSince < noActivityGraceMs()) return { status: "running", claimId: null };
     if (receipt.reply === "filed") return uncertain("The agent reported a filed claim, but no Computer Use activity was found for its conversation.");
     return {
       status: "failed", claimId: null,

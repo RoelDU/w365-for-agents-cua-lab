@@ -1002,3 +1002,43 @@ test("R6: 'Filing failed' after this run clicked Submit is uncertain, not a retr
   assert.equal(result.claimId, null);
   assert.equal(result.outcome, "uncertain");
 });
+
+test("R6 review: a number mentioned between two Submit clicks is not the claim the second Submit created", async (t) => {
+  const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+  world.logs["session-42"].push(
+    submitClick("2026-10-02T01:04:40Z"),
+    actionLog({ at: "2026-10-02T01:04:45Z", message: "msg-between", explanation: "Claims shows an existing claim CLM-2024-000111 for this policy; I will submit again." }),
+    submitClick("2026-10-02T01:04:50Z"),
+    confirmOk("Clicking OK to close the confirmation dialog.")
+  );
+  const result = await progressFor(t, world);
+  assert.equal(result.claimId, null);
+  assert.notEqual(result.status, "succeeded");
+});
+
+test("R6 review: the answer does not depend on which service instance read the log first", async (t) => {
+  const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+  world.logs["session-42"].push(submitClick(), realConfirmation("CLM-2026-004321"));
+  const { start, progress, newInstance } = loadStart(t, { CUA_REQUIRE_REAL_RESULT: "1" }, world.respond);
+  const started = await start({ callContext, lang: "en" });
+  assert.equal((await progress(started.jsonBody.runId)).jsonBody.claimId, "CLM-2026-004321");
+  world.receipt = receiptFor("conv-42", ["Claim CLM-2024-000111 has been filed"]);
+  const same = (await progress(started.jsonBody.runId)).jsonBody;
+  newInstance();
+  const other = (await progress(started.jsonBody.runId)).jsonBody;
+  assert.deepEqual([same.status, same.outcome, same.claimId], [other.status, other.outcome, other.claimId]);
+  assert.equal(other.outcome, "uncertain");
+});
+
+test("R6 review: the no-activity grace period starts at the agent's reply, not at an early receipt", async (t) => {
+  const world = liveWorld({ sessions: [], receipt: receiptFor("conv-42", []) });
+  const { start, progress } = loadStart(t, { CUA_REQUIRE_REAL_RESULT: "1", CUA_NO_ACTIVITY_GRACE_MS: "60000" }, world.respond);
+  const started = await start({ callContext, lang: "en" });
+  const realNow = Date.now;
+  t.after(() => { Date.now = realNow; });
+  assert.equal((await progress(started.jsonBody.runId)).jsonBody.status, "running");
+  Date.now = () => realNow() + 120_000;
+  world.receipt = receiptFor("conv-42", ["Here is a structured summary of the claim."]);
+  const justReplied = (await progress(started.jsonBody.runId)).jsonBody;
+  assert.equal(justReplied.status, "running");
+});

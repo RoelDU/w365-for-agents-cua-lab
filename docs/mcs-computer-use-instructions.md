@@ -164,6 +164,32 @@ What this establishes, and what it does not:
 - Keep the "Result" step above (read the number from the confirmation, then click OK) and the
   final-result wording unchanged, or update this check with them. A Submit made with the
   keyboard instead of a click is not recognised and ends as "outcome unknown".
+
+### Open limitation: the claim number is not independently observed (release QA R6, partial)
+
+The service now establishes from Computer use's own records that **this run submitted a claim**.
+It does not establish **which number** the Claims app gave it: if the agent misreads or misstates
+the number while clicking OK, that number is reported. Text that names an older claim or denies a
+new one, said at that moment and not earlier, is not caught; matching such wording is not a
+reliable check.
+
+What is missing is a record of the number made by something other than the agent. The
+Computer use log stores, for each click, the clicked control's name and ID, not the text shown
+in other controls, and the service does not read screenshots.
+
+Smallest supported remedy (not done here; it changes the Claims app and its deployment):
+
+1. A new Claims build sets the claim number as the accessible name of the confirmation's OK
+   button (Windows Dynamic Annotation, `IAccPropServices::SetHwndPropStr` with
+   `PROPID_ACC_NAME`), leaving its visible text "OK". Computer use already records the clicked
+   control's name, as it did for "OK" and "Submit Claim" in the reference runs; that this
+   annotated name reaches the log must be confirmed on a Cloud PC.
+2. The handoff service then takes the number from that recorded name and accepts the agent's
+   number only if it matches.
+3. Compatibility: the Foundry agent's confirmation check (`confirmation_claim_id` in
+   `samples\foundry-hosted-claims\hosted_claims\claims.py`) requires a button named exactly "OK"
+   and must accept the new name. The Claims version, `Detect.ps1` and the Intune package must be
+   updated and delivered to both pools before the service relies on it.
 ## How the call's details reach Computer use
 
 The tool instructions contain the placeholder `{System.Activity.Text}`. At run time Copilot

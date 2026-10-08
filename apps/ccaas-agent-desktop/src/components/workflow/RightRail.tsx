@@ -753,8 +753,6 @@ export function RightRail() {
           return;
         }
         if (useHandoffStore.getState().status !== "idle") return;
-        // Backstop: never a new claim run while an earlier request may have filed one.
-        if (isUnresolved(useRecoveryStore.getState().record)) return;
         const ctx = buildCallContext({
           scenario,
           agent,
@@ -948,9 +946,6 @@ export function RightRail() {
       // browser-direct Direct Line stream returns nothing under MS auth), and it
       // preserves the Activity / Session-replay audit trail.
       if (backend === "mcs" && cuaRunBaseUrl) {
-        // Backstop: never a new MCS transfer while an earlier request (from any destination)
-        // may have filed a claim.
-        if (isUnresolved(useRecoveryStore.getState().record)) return;
         const effectiveSummary = summary || scenario.summary_seed;
         const ctx = buildCallContext({
           scenario,

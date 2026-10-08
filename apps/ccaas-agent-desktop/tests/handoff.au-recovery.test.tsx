@@ -297,5 +297,9 @@ describe("MCS result the service cannot prove (mock HTTP, not live proof)", () =
     await new Promise((r) => setTimeout(r, 200));
     expect(useHandoffStore.getState().status).toBe("submitted");
     expect(useHandoffStore.getState().claimId).toBe("CLM-2024-007004");
+    // ...but the later doubt is shown, not dropped.
+    const log = useHandoffStore.getState().activity.map((x) => x.message).join("\n");
+    expect(log).toMatch(/A later check of CLM-2024-007004 could not confirm it/);
+    expect(log).toMatch(/exact handoff row is unavailable/);
   }, 12000);
 });
