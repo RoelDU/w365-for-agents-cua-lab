@@ -469,10 +469,13 @@ async def run(
         stage = "desktop_setup_check"
         setup_seen: bool | None = None  # None until a screen reading actually returns
         setup_reported = False
-        # REQ-2026-576139834574: the first screen read after readiness was rejected and the run
-        # ended at once. A rejected read here is treated like an unreadable screen: it is shown,
-        # retried within the same grace, and named if it never clears. It is read-only.
-        last_rejection: dict[str, Any] | None = None
+        # REQ-2026-576139834574: a tool call was rejected and the run ended at once. From the
+        # timing (release seconds after Start Session) it was inferred, not proven, to be the
+        # first screen read after readiness. A rejected read here is treated like an unreadable
+        # screen: it is shown, retried within the same grace, and named if it never clears.
+        # It is read-only.
+        last_rejection = None
+        tree: str | None = None
         try:
             async with asyncio.timeout(setup_timeout):
                 while True:
@@ -551,7 +554,7 @@ async def run(
                 "args": CLAIMS_ARGS,
             },
         )
-        tree: str | None = None
+        tree = None
         # A window opened at first sign-in (seen live: blank Edge) can stay in front of the
         # launched Claims window. Request activation once; retry only a reply that positively
         # says the window is not found yet. Anything else (approval required, other rejection,
@@ -769,7 +772,7 @@ async def run(
                 if extra:
                     logger.warning(
                         "End Session rejected diagnostic=%s request=%s",
-                        error.diagnostic,
+                        extra["diagnostic"],
                         request_id,
                     )
                 emit(
@@ -781,5 +784,7 @@ async def run(
                     **extra,
                 )
         outcome["release_status"] = release_status
+        # Release QA R5: callers decide whether a new transfer is safe from this, not from text.
+        outcome["submit_sent"] = claims_state["submit_sent"]
         emit("outcome", source="application", **outcome)
     return outcome
