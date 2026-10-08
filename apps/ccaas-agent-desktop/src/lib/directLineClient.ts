@@ -74,6 +74,8 @@ export interface DirectLineUpdate {
   claimId?: string;
   /** Human-readable reason (for "error"). */
   errorMessage?: string;
+  /** For "error": the service could not tell whether a claim was filed, so no retry is offered. */
+  uncertain?: boolean;
   /** Logged action (for "step"). */
   step?: LiveStep;
   /** Attribution state (for "activity"). */

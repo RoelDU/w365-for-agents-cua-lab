@@ -218,3 +218,34 @@ describe("AU recovery on the reconstructed release (mock HTTP, not live proof)",
     expect(screen.queryByTestId("ai-live-explanation-label")).toBeNull();
   });
 });
+
+// Release QA R6 (8 Oct 2026): the service says when a claim may or may not have been filed.
+describe("MCS result the service cannot prove (mock HTTP, not live proof)", () => {
+  function failWith(body: Record<string, unknown>) {
+    server.use(
+      http.post("http://mcs.test/api/cua-run", () => HttpResponse.json({ runId: "r-uncertain" })),
+      http.get("http://mcs.test/api/cua-run/r-uncertain/progress", () => HttpResponse.json({
+        status: "failed", claimId: null, steps: [], activity: { state: "verified", conversationId: "c9" },
+        release: { state: "pending" }, ...body
+      }))
+    );
+  }
+
+  it("offers no Retry when a claim may or may not have been filed", async () => {
+    failWith({ outcome: "uncertain", errorMessage: "The agent's reply does not confirm a filed claim. A claim may or may not have been filed. Check its run record; do not submit another handoff." });
+    await transfer();
+    const error = await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    expect(error).toHaveTextContent("STOPPED - OUTCOME UNKNOWN");
+    expect(error).toHaveTextContent(/may or may not have been filed/);
+    expect(screen.queryByTestId("handoff-retry")).toBeNull();
+    expect(useHandoffStore.getState().claimId).toBeNull();
+  });
+
+  it("keeps Retry for a failure the agent reported before filing", async () => {
+    failWith({ errorMessage: 'The agent reported "Filing failed: POLICY_NOT_FOUND", so no claim was filed.' });
+    await transfer();
+    const error = await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    expect(error).toHaveTextContent(/POLICY_NOT_FOUND/);
+    expect(screen.getByTestId("handoff-retry")).toBeInTheDocument();
+  });
+});

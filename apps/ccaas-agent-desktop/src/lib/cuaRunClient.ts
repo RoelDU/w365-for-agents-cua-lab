@@ -51,6 +51,8 @@ interface CuaProgressResponse {
   claimId?: string;
   /** Human-readable failure reason when status === "failed". */
   errorMessage?: string;
+  /** "uncertain" when a failed run may or may not have filed a claim. */
+  outcome?: "uncertain";
   /** Whether the shown activity is proven to belong to this handoff. */
   activity?: LiveActivity;
   /** Cloud PC release, separate from the claim. */
@@ -149,6 +151,7 @@ async function getProgress(baseUrl: string, runId: string, signal?: AbortSignal)
     steps: Array.isArray(body.steps) ? body.steps : [],
     claimId: body.claimId,
     errorMessage: body.errorMessage,
+    ...(body.outcome === "uncertain" ? { outcome: "uncertain" as const } : {}),
     activity: body.activity,
     release: body.release,
     simulated: body.simulated === true
@@ -241,7 +244,8 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
       } else if (prog.status === "failed") {
         onUpdate({
           type: "error",
-          errorMessage: prog.errorMessage || "The AI run did not complete successfully."
+          errorMessage: prog.errorMessage || "The AI run did not complete successfully.",
+          ...(prog.outcome === "uncertain" ? { uncertain: true } : {})
         });
         done = true;
       }

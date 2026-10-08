@@ -119,7 +119,29 @@ Final result: one line, "Claim CLM-YYYY-NNNNNN has been filed" or "Filing failed
 - **Unchanged from 5 October 2026:** the agent instructions, exact launch command and flags, Policy # radio and left
   search box (the right-hand box is read-only), the intent-to-loss-type map, one Submit after
   checking the review, the claim-number sentence the handoff service reads (it accepts exactly
-  one claim number), and release by `shutdown /l`.
+  one claim, in the completion line; see below), and release by `shutdown /l`.
+
+## How the handoff service recognises a filed claim
+
+The handoff service (`apps\handoff-orchestrator`, `GET /api/cua-run/{runId}/progress` with
+`CUA_REQUIRE_REAL_RESULT=1`) reports a claim only from the documented completion line
+"Claim CLM-YYYY-NNNNNN has been filed" (optionally followed by "successfully", then the end of
+the sentence or a comma). It reads that line in the agent's reply saved on this handoff's own
+Dataverse row or, when that reply is not there yet, in the explanations logged by the Computer
+use session whose conversation that row names. A claim number that is only mentioned, negated
+("has not been filed") or qualified ("has been filed previously") is not a filed claim.
+
+| Agent result | Service status | Zava |
+| --- | --- | --- |
+| One claim in the completion line | `succeeded` with that claim number | Shows the claim. |
+| "Filing failed: CODE" | `failed` | Shows the code; Retry offered. |
+| Reply without Computer Use, after the grace period | `failed` | Not filed; Retry offered. |
+| Anything else that ended: uncertain reply, conflicting claims, wrong conversation, a session that ended without the line | `failed` with `outcome: "uncertain"` | "STOPPED - OUTCOME UNKNOWN", no Retry: check the Claims Workstation first. |
+
+The line is the agent's own statement, read from its reply or log. Unlike the Foundry agent,
+which reads the confirmation dialog itself, this path does not independently read the Claims
+screen. Keep the "Result" step and the final-result wording above unchanged, or update this
+check with them.
 
 ## How the call's details reach Computer use
 

@@ -1023,7 +1023,10 @@ export function RightRail() {
                 break;
               case "error":
                 if (u.errorMessage) {
-                  setHandoffError("UNKNOWN", u.errorMessage);
+                  // A claim may or may not have been filed: no Retry on the card.
+                  setHandoffError("UNKNOWN", u.errorMessage, u.uncertain
+                    ? { outcome: "stopped", stage: "status", auth: false, interactionRequired: false, code: "" }
+                    : undefined);
                   pushActivity({ level: "error", message: u.errorMessage });
                 }
                 break;

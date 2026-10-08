@@ -286,7 +286,7 @@ test("real-result mode returns the agent receipt saved to this exact handoff row
 
 for (const [name, changes] of [
   ["another handoff", { trigger_row_id: "other-row" }],
-  ["conflicting claim numbers", { responses: ["CLM-2026-001234", "CLM-2026-005678"] }],
+  ["conflicting filed claims", { responses: ["Claim CLM-2026-001234 has been filed", "Claim CLM-2026-005678 has been filed"] }],
   ["malformed responses", { responses: [42] }],
   ["no conversation", { conversation_id: "" }]
 ]) {
@@ -648,10 +648,6 @@ test("an unattributed run is attributed exactly by the receipt's conversation", 
 
 // "Execute Agent and wait" can return before a Computer Use run finishes, with no
 // responses yet (seen live 2026-10-02). The receipt then only identifies the conversation.
-const confirmation = (id, at = "2026-10-02T01:05:00Z") => actionLog({
-  at, message: `msg-confirm-${id}`,
-  explanation: `The claim has been successfully submitted! The confirmation dialog shows "FNOL Submitted" with claim number ${id}.`
-});
 
 test("a receipt saved before the agent replies verifies the conversation and keeps the run going", async (t) => {
   const world = liveWorld({ receipt: receiptFor("conv-42", []) });
@@ -672,7 +668,7 @@ test("the claim number comes from the verified conversation's own logged confirm
   const started = await start({ callContext, lang: "en" });
   assert.equal((await progress(started.jsonBody.runId)).jsonBody.status, "running");
 
-  world.logs["session-42"].push(confirmation("CLM-2026-004321"), confirmation("CLM-2026-004321", "2026-10-02T01:05:10Z"));
+  world.logs["session-42"].push(filedLine("CLM-2026-004321"), filedLine("CLM-2026-004321", "2026-10-02T01:05:10Z"));
   const result = (await progress(started.jsonBody.runId)).jsonBody;
   assert.equal(result.status, "succeeded");
   assert.equal(result.claimId, "CLM-2026-004321");
@@ -682,7 +678,7 @@ test("the claim number comes from the verified conversation's own logged confirm
 
 test("a claim number in activity not yet verified by the receipt is not reported", async (t) => {
   const world = liveWorld();
-  world.logs["session-42"].push(confirmation("CLM-2026-004321"));
+  world.logs["session-42"].push(filedLine("CLM-2026-004321"));
   const { start, progress } = loadStart(t, { CUA_REQUIRE_REAL_RESULT: "1" }, world.respond);
   const started = await start({ callContext, lang: "en" });
   const result = (await progress(started.jsonBody.runId)).jsonBody;
@@ -697,7 +693,7 @@ for (const [name, change] of [
     world.sessions[0] = { ...world.sessions[0], completedon: "2026-10-02T01:08:00Z", errorcode: "SessionHasLoggedOff" };
   }],
   ["logs conflicting claim numbers", (world) => {
-    world.logs["session-42"].push(confirmation("CLM-2026-004321"), confirmation("CLM-2026-009999", "2026-10-02T01:05:10Z"));
+    world.logs["session-42"].push(filedLine("CLM-2026-004321"), filedLine("CLM-2026-009999", "2026-10-02T01:05:10Z"));
   }]
 ]) {
   test(`a verified session that ${name} is reported as unverifiable, not guessed`, async (t) => {
@@ -766,4 +762,75 @@ test("the offline simulation is labelled and never presents its script as an exp
   assert.equal(result.simulated, true);
   assert.ok(result.steps.length > 0);
   assert.ok(result.steps.every((s) => s.explanation === null && typeof s.note === "string"));
+});
+
+// ---------------------------------------------------------------------------
+// Release QA R6 (8 Oct 2026): only the agent's documented completion line,
+// "Claim CLM-YYYY-NNNNNN has been filed", from this exact handoff's receipt or
+// receipt-verified conversation proves a new claim. A mention of a number does not.
+// Anything that cannot be proven is reported as uncertain, so no blind retry.
+// ---------------------------------------------------------------------------
+const filedLine = (id, at = "2026-10-02T01:05:00Z") => actionLog({
+  at, message: `msg-filed-${id}`,
+  // Phrasing as logged in the reference runs of 7 October 2026.
+  explanation: `**mental_note** Claim ${id} has been filed, now releasing the workstation by signing out.`
+});
+
+async function progressFor(t, world, env = {}) {
+  const { start, progress } = loadStart(t, { CUA_REQUIRE_REAL_RESULT: "1", ...env }, world.respond);
+  const started = await start({ callContext, lang: "en" });
+  return (await progress(started.jsonBody.runId)).jsonBody;
+}
+
+for (const [name, responses] of [
+  ["mentions only an earlier claim on the policy", ["The policy already has claim CLM-2024-000111 on file. Filing status uncertain: check the Claims Workstation before any retry."]],
+  ["says the claim was not filed", ["Claim CLM-2026-001234 has not been filed."]],
+  ["says Submit was clicked but no number was seen", ["Submit Claim clicked, claim number not seen"]],
+  ["both reports a filing and a failure", ["Claim CLM-2026-001234 has been filed", "Filing failed: UNKNOWN"]]
+]) {
+  test(`an agent reply that ${name} is not a filed claim and is reported as uncertain`, async (t) => {
+    const result = await progressFor(t, liveWorld({ receipt: receiptFor("conv-42", responses) }));
+    assert.equal(result.status, "failed");
+    assert.equal(result.claimId, null);
+    assert.equal(result.outcome, "uncertain");
+    assert.match(result.errorMessage, /do not submit another handoff/);
+  });
+}
+
+test("an agent reply 'Filing failed: CODE' is a definite failure that may be retried", async (t) => {
+  const result = await progressFor(t, liveWorld({ receipt: receiptFor("conv-42", ["Filing failed: POLICY_NOT_FOUND"]) }));
+  assert.equal(result.status, "failed");
+  assert.equal(result.claimId, null);
+  assert.equal(result.outcome, undefined);
+  assert.match(result.errorMessage, /POLICY_NOT_FOUND/);
+});
+
+test("the documented completion line in the reply still returns the claim at once", async (t) => {
+  const result = await progressFor(t, liveWorld({ receipt: receiptFor("conv-42", ["Claim CLM-2026-001234 has been filed"]) }));
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.claimId, "CLM-2026-001234");
+});
+
+for (const [name, explanation] of [
+  ["an earlier claim on the policy", "The policy history lists claim CLM-2024-000111 from last year."],
+  ["a plan to report the number", "After Submit I will report Claim CLM-2026-000000 has been filed? Not yet: the review page is still open."],
+  ["a negated filing", "Claim CLM-2026-004321 has not been filed yet; the review page is still open."],
+  ["an earlier claim in the documented words", "Claim CLM-2024-000111 has been filed previously on this policy, so I will now file the new one."]
+]) {
+  test(`with an early receipt, a log line naming ${name} does not finish the run`, async (t) => {
+    const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+    world.logs["session-42"].push(actionLog({ at: "2026-10-02T01:04:00Z", message: "msg-mention", explanation }));
+    const result = await progressFor(t, world);
+    assert.equal(result.status, "running");
+    assert.equal(result.claimId, null);
+  });
+}
+
+test("with an early receipt, the verified conversation's completion line returns the claim at once", async (t) => {
+  const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+  world.logs["session-42"].push(filedLine("CLM-2026-004321"));
+  const result = await progressFor(t, world);
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.claimId, "CLM-2026-004321");
+  assert.equal(result.activity.state, "verified");
 });
