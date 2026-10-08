@@ -43,6 +43,8 @@ interface TransferDirectoryProps {
     onRefresh?: () => void; detail?: string };
   /** Whether the separate new-harness destination can take a transfer now, and why not. */
   newHarness: { enabled: boolean; message: string | null };
+  /** Copilot Studio (MCS): blocked only while an earlier MCS request may have filed a claim. */
+  mcs?: { enabled: boolean; message: string | null };
   /** Select a human queue destination (demo no-op). */
   onRouteToQueue: (name: string) => void;
   /** When true, auto-select the AI destination shortly after opening so the
@@ -58,13 +60,14 @@ export function TransferDirectory({
   onRouteToQueue,
   cuaMode,
   foundry,
-  newHarness
+  newHarness,
+  mcs = { enabled: true, message: null }
 }: TransferDirectoryProps) {
   const t = useT();
   const backend = useSettingsStore((s) => s.backend);
   const viaTrigger = !!useSettingsStore((s) => s.cuaRunBaseUrl);
   const autoPick =
-    backend === "mcs" ||
+    (backend === "mcs" && mcs.enabled) ||
     (backend === "foundry" && foundry.enabled) ||
     (backend === "mcs-new-harness" && newHarness.enabled);
   // CUA mode: visibly open the directory, then auto-pick the selected AI
@@ -77,7 +80,7 @@ export function TransferDirectory({
   }, [open, cuaMode, canHandoff, autoPick, backend, onSelectAi]);
 
   const destinations: { id: AgentBackend; enabled: boolean; nameKey: string; subtitleKey: string; ariaKey: string; noteTestId: string; note: string | null }[] = [
-    { id: "mcs", enabled: canHandoff, nameKey: "dir.mcsAgentName", subtitleKey: viaTrigger ? "dir.aiAgentSubtitleTrigger" : "dir.aiAgentSubtitle", ariaKey: "dir.mcsAgentAria", noteTestId: "handoff-mcs-availability", note: null },
+    { id: "mcs", enabled: canHandoff && mcs.enabled, nameKey: "dir.mcsAgentName", subtitleKey: viaTrigger ? "dir.aiAgentSubtitleTrigger" : "dir.aiAgentSubtitle", ariaKey: "dir.mcsAgentAria", noteTestId: "handoff-mcs-availability", note: mcs.message },
     { id: "foundry", enabled: canHandoff && foundry.enabled, nameKey: "dir.foundryAgentName", subtitleKey: foundry.hosted ? "dir.foundryHostedSubtitle" : "dir.foundrySubtitle", ariaKey: "dir.foundryAgentAria", noteTestId: "handoff-foundry-availability", note: foundry.message },
     { id: "mcs-new-harness", enabled: canHandoff && newHarness.enabled, nameKey: "dir.newHarnessAgentName", subtitleKey: "dir.newHarnessSubtitle", ariaKey: "dir.newHarnessAgentAria", noteTestId: "handoff-new-harness-availability", note: newHarness.message }
   ];

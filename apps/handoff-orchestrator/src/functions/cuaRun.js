@@ -203,13 +203,7 @@ app.http("cuaRunProgress", {
     } catch (err) {
       context.error("cua-run progress failed", err);
       if (process.env.CUA_REQUIRE_REAL_RESULT === "1" && err instanceof Unverifiable) {
-        return json(200, {
-          status: "failed",
-          outcome: "uncertain",
-          steps: [],
-          claimId: null,
-          errorMessage: `Could not verify this handoff's result: ${err.message} A claim may or may not have been filed. Check its run record; do not submit another handoff.`
-        });
+        return json(200, { ...uncertain(`Could not verify this handoff's result: ${err.message}`), steps: [] });
       }
       // A read that failed (network, throttling, a service restart) proves nothing about
       // this handoff: keep the client polling, with no new steps.
@@ -517,13 +511,13 @@ async function readReceipt(run) {
   const filed = filedClaims(receipt.responses);
   if (filed.length > 1) throw new Unverifiable("the agent receipt names more than one filed claim.");
   const failed = receipt.responses.map((text) => /\bFiling failed: ([A-Z][A-Z_]*)\b/.exec(text)).find(Boolean);
-  const replied = receipt.responses.some((text) => text.trim());
+  const answered = receipt.responses.some((text) => text.trim());
   // The agent's documented final reply is one line: "Claim CLM-... has been filed", or
   // "Filing failed: CODE", or an uncertain/incomplete report. Only the first proves a claim.
   let reply = "none";
   if (filed.length === 1 && !failed) reply = "filed";
   else if (failed && !filed.length) reply = "failed";
-  else if (replied) reply = "uncertain";
+  else if (answered) reply = "uncertain";
   return {
     claimId: reply === "filed" ? filed[0] : null,
     failure: reply === "failed" ? failed[1] : null,
@@ -536,12 +530,14 @@ async function readReceipt(run) {
 
 /**
  * The claims stated as filed in the agent's documented words, "Claim CLM-YYYY-NNNNNN has
- * been filed" (optionally "successfully"), ending the sentence or clause. A number merely
- * mentioned, negated ("has not been filed"), qualified ("filed previously") or asked about
- * is not a filed claim.
+ * been filed" (optionally "successfully"), as a statement of its own: it starts the text,
+ * a sentence or a line (optionally after the agent's "**mental_note**" marker) and ends
+ * the sentence or clause. A number merely mentioned, negated ("has not been filed"),
+ * qualified ("filed previously"), asked about, planned, or inside a condition or a
+ * history note ("If Claim ...", "Policy history: Claim ...") is not a filed claim.
  */
 function filedClaims(texts) {
-  const line = /\bClaim (CLM-\d{4}-\d{6}) has been filed(?: successfully)?(?=\s*(?:[,.!*"]|$))/g;
+  const line = /(?:^|[.!?]\s+|\n\s*)(?:\*\*)?(?:mental_note\*\*:?\s*)?(?:\*\*)?Claim (CLM-\d{4}-\d{6}) has been filed(?: successfully)?(?=\s*(?:[,.!*"]|$))/g;
   return [...new Set(texts.flatMap((text) => [...String(text).matchAll(line)].map((m) => m[1])))];
 }
 

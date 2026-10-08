@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { RightRail } from "@/components/workflow/RightRail";
@@ -10,6 +10,7 @@ import { useHandoffStore } from "@/stores/useHandoffStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import type { CallContext } from "@/types/contracts";
 import { SAMPLE_AGENT } from "./fixtures/agent";
+import { resetTransferRecorderForTests } from "@/lib/handoffRecovery";
 
 // The shared service also answers the Foundry availability check when the directory opens.
 const server = setupServer(
@@ -221,6 +222,11 @@ describe("AU recovery on the reconstructed release (mock HTTP, not live proof)",
 
 // Release QA R6 (8 Oct 2026): the service says when a claim may or may not have been filed.
 describe("MCS result the service cannot prove (mock HTTP, not live proof)", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    resetTransferRecorderForTests();
+  });
+
   function failWith(body: Record<string, unknown>) {
     server.use(
       http.post("http://mcs.test/api/cua-run", () => HttpResponse.json({ runId: "r-uncertain" })),
@@ -248,4 +254,29 @@ describe("MCS result the service cannot prove (mock HTTP, not live proof)", () =
     expect(error).toHaveTextContent(/POLICY_NOT_FOUND/);
     expect(screen.getByTestId("handoff-retry")).toBeInTheDocument();
   });
+
+  it("keeps an uncertain MCS request unresolved through reset and reload until someone checks the claims system", async () => {
+    failWith({ outcome: "uncertain", errorMessage: "The agent's session ended without reporting a filed claim in its log. A claim may or may not have been filed. Check its run record; do not submit another handoff." });
+    await transfer();
+    await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    fireEvent.click(screen.getByTestId("handoff-fallback"));
+    window.dispatchEvent(new CustomEvent("ccaas:reset-demo"));
+
+    cleanup();
+    useHandoffStore.getState().reset();
+    resetTransferRecorderForTests();
+    render(<TooltipProvider><RightRail /></TooltipProvider>);
+    const note = await screen.findByTestId("previous-transfer");
+    expect(note).toHaveAttribute("data-state", "stopped");
+    expect(note).toHaveTextContent(/may or may not have been filed/);
+    expect(within(note).queryByTestId("previous-transfer-dismiss")).toBeNull();
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    await waitFor(() => expect(screen.getByTestId("handoff-to-ai-mcs")).toBeDisabled());
+    expect(screen.getByTestId("handoff-mcs-availability")).toHaveTextContent(/may already have filed a claim/);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    fireEvent.click(within(screen.getByTestId("previous-transfer")).getByTestId("previous-transfer-acknowledge"));
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    await waitFor(() => expect(screen.getByTestId("handoff-to-ai-mcs")).not.toBeDisabled());
+  }, 12000);
 });

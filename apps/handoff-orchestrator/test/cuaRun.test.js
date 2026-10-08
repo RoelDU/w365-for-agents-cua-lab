@@ -834,3 +834,45 @@ test("with an early receipt, the verified conversation's completion line returns
   assert.equal(result.claimId, "CLM-2026-004321");
   assert.equal(result.activity.state, "verified");
 });
+
+// Spec review of the R6 fix (8 Oct 2026): the documented words inside a condition, a question,
+// a plan or a history note are not the agent stating that it filed a claim.
+const hedged = [
+  "If Claim CLM-2026-000123 has been filed, stop.",
+  "Check whether Claim CLM-2026-000123 has been filed.",
+  "I will state Claim CLM-2026-000123 has been filed.",
+  "Not sure Claim CLM-2026-000123 has been filed.",
+  "Policy history: Claim CLM-2025-000123 has been filed."
+];
+for (const sentence of hedged) {
+  test(`a log line "${sentence}" does not finish the run`, async (t) => {
+    const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+    world.logs["session-42"].push(actionLog({ at: "2026-10-02T01:04:00Z", message: "msg-hedged", explanation: sentence }));
+    const result = await progressFor(t, world);
+    assert.equal(result.status, "running");
+    assert.equal(result.claimId, null);
+  });
+  test(`a reply "${sentence}" is uncertain, not a filed claim`, async (t) => {
+    const result = await progressFor(t, liveWorld({ receipt: receiptFor("conv-42", [sentence]) }));
+    assert.equal(result.claimId, null);
+    assert.equal(result.outcome, "uncertain");
+  });
+}
+
+// Every completion line logged in the reference runs of 7 October 2026 still counts.
+for (const line of [
+  "**mental_note** Claim CLM-2024-007004 has been filed, now releasing the workstation by signing out.",
+  "**mental_note**: Claim CLM-2024-007005 has been filed successfully. Confirmation dialog shows claim submitted.",
+  "**Claim CLM-2024-007005 has been filed, now releasing the workstation by clicking OK on the confirmation dialog.",
+  "The new claim ID is now displayed in the \"Claim ID (after submission)\" field. Claim CLM-2024-007005 has been filed, now releasing the workstation by signing out.",
+  "I'll press Windows+R to open the Run dialog.\n\nClaim CLM-2024-007004 has been filed, now releasing the workstation.",
+  "Claim CLM-2024-007004 has been filed"
+]) {
+  test(`the reference completion line "${line.slice(0, 50)}..." returns its claim`, async (t) => {
+    const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+    world.logs["session-42"].push(actionLog({ at: "2026-10-02T01:05:00Z", message: "msg-real", explanation: line }));
+    const result = await progressFor(t, world);
+    assert.equal(result.status, "succeeded");
+    assert.match(result.claimId, /^CLM-2024-00700[45]$/);
+  });
+}

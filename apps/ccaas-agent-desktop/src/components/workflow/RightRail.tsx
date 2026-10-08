@@ -23,6 +23,7 @@ import {
   getFoundryAvailability,
   getFoundryCapacity,
   prepareFoundryHosted,
+  POSSIBLY_FILED,
   readFoundryOutcome,
   runFoundryHosted,
   type FoundryEvent
@@ -425,7 +426,11 @@ export function RightRail() {
         if (!foundryAvailability.ready) return { enabled: false, message: foundryAvailability.message, hosted: true };
         // One unresolved request per interaction: reconcile it before any new start.
         if (foundryBlocked && transferRecord) {
-          return { enabled: false, message: t("dir.foundryUnresolved", { id: transferRecord.request_id }), hosted: true };
+          return {
+            enabled: false,
+            message: t(transferRecord.backend === "mcs" ? "dir.possiblyFiled" : "dir.foundryUnresolved", { id: transferRecord.request_id }),
+            hosted: true
+          };
         }
         switch (handoffSignIn.mode) {
           case "ready":
@@ -619,7 +624,7 @@ export function RightRail() {
               // Submit Claim may have been sent: keep this request unresolved (no Retry, kept
               // across reset and reload) until a person has checked the claims system.
               const message = `${read.kind === "error" ? read.message : ""} A claim may have been filed for ${ctx.request_id}. Check the claims system before any new transfer.`.trim();
-              setHandoffError("UNKNOWN", message, { outcome: "stopped", stage: "status", auth: false, interactionRequired: false, code: "" });
+              setHandoffError("UNKNOWN", message, POSSIBLY_FILED);
               pushActivity({ level: "error", message: `Foundry run ended: ${message}` });
             }
             break;
@@ -933,6 +938,9 @@ export function RightRail() {
       // browser-direct Direct Line stream returns nothing under MS auth), and it
       // preserves the Activity / Session-replay audit trail.
       if (backend === "mcs" && cuaRunBaseUrl) {
+        // Backstop: never a new MCS transfer while an earlier one may have filed a claim.
+        const pending = useRecoveryStore.getState().record;
+        if (isUnresolved(pending) && pending?.backend === "mcs") return;
         const effectiveSummary = summary || scenario.summary_seed;
         const ctx = buildCallContext({
           scenario,
@@ -1025,7 +1033,7 @@ export function RightRail() {
                 if (u.errorMessage) {
                   // A claim may or may not have been filed: no Retry on the card.
                   setHandoffError("UNKNOWN", u.errorMessage, u.uncertain
-                    ? { outcome: "stopped", stage: "status", auth: false, interactionRequired: false, code: "" }
+                    ? POSSIBLY_FILED
                     : undefined);
                   pushActivity({ level: "error", message: u.errorMessage });
                 }
@@ -1361,7 +1369,7 @@ export function RightRail() {
               {isUnresolved(transferRecord) && (transferRecord.state === "stopped" || recordOwnedByOther) && (
                 <Button size="sm" variant="secondary" data-testid="previous-transfer-acknowledge" onClick={() => {
                   if (acknowledgeTransfer()) {
-                    pushActivity({ level: "warn", message: `${transferRecord.request_id} was marked as checked in the claims system by the agent; Foundry can be used again.` });
+                    pushActivity({ level: "warn", message: `${transferRecord.request_id} was marked as checked in the claims system by the agent; AI transfers can be used again.` });
                   }
                 }}>
                   {t("rail.prevTransfer.acknowledge")}
@@ -1413,6 +1421,9 @@ export function RightRail() {
           cuaMode={cuaMode}
           foundry={foundryDestination}
           newHarness={newHarnessDestination}
+          mcs={transferRecord && isUnresolved(transferRecord) && transferRecord.backend === "mcs"
+            ? { enabled: false, message: t("dir.possiblyFiled", { id: transferRecord.request_id }) }
+            : { enabled: true, message: null }}
         />
 
         <HandoffModal

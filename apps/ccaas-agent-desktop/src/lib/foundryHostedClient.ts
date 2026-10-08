@@ -219,6 +219,9 @@ export type FoundryUpdate =
   | { type: "error"; message: string; failure: FoundryFailure }
   | { type: "done" };
 
+/** A transfer that may or may not have filed a claim: no Retry, kept until a person checks the claims system. */
+export const POSSIBLY_FILED: FoundryFailure = { outcome: "stopped", stage: "status", auth: false, interactionRequired: false, code: "" };
+
 export type FoundryRunResult =
   | { kind: "submitted"; claimId: string; agentId: string }
   | { kind: "error"; code: string; message: string; possiblySubmitted: boolean };
