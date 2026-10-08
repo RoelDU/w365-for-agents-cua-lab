@@ -11,8 +11,7 @@ labels: bug
 
 - [ ] Legacy Claims Workstation (`apps/legacy-claims-workstation/`)
 - [ ] CCaaS Agent Desktop (`apps/ccaas-agent-desktop/`)
-- [ ] Local Orchestrator (`samples/local-orchestrator/`)
-- [ ] Foundry / Copilot Studio agent setup (`apps/legacy-claims-workstation/samples/foundry-agent/`)
+- [ ] MCS or Foundry AI path setup
 - [ ] Shared schemas (`schemas/`)
 - [ ] Documentation (`README.md`, `docs/`)
 

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { RegionOption, ResolvedRegionConfig } from "@/lib/regionConfig";
 
-export type AgentBackend = "mcs" | "foundry";
+export type AgentBackend = "mcs" | "foundry" | "mcs-new-harness";
 
 export interface SettingsState {
   /** The handoff endpoint the desktop posts to (derived from the selected backend). */
@@ -25,6 +25,12 @@ export interface SettingsState {
    * under MS auth). Empty = use the directLineTokenUrl stream / orchestrator.
    */
   cuaRunBaseUrl: string;
+  /**
+   * Base URL (ending /api) of the service exposing the isolated new-harness relay
+   * (/nh-claims/*). Empty = the "MCS - new harness (experimental)" destination is
+   * shown but not configured. Never persisted; never reused for the other backends.
+   */
+  newHarnessBaseUrl: string;
   setOrchestratorUrl: (url: string) => void;
   setBackend: (backend: AgentBackend) => void;
   setCuaMode: (on: boolean) => void;
@@ -103,7 +109,20 @@ function cuaRunBaseUrlOverride(): string {
   return q && q.trim() ? q.trim() : "";
 }
 
+/**
+ * New-harness relay base URL: `?newHarnessBaseUrl=` overrides the region value,
+ * which overrides the VITE_NEW_HARNESS_BASE_URL build seed.
+ */
+function newHarnessBaseUrlOverride(): string {
+  if (typeof window === "undefined") return "";
+  const q = new URLSearchParams(window.location.search).get("newHarnessBaseUrl");
+  return q && q.trim() ? q.trim() : "";
+}
+export const NEW_HARNESS_BASE_URL = newHarnessBaseUrlOverride() || viteEnv("VITE_NEW_HARNESS_BASE_URL") || "";
+
 export function urlForBackend(backend: AgentBackend): string {
+  // The new-harness path never uses the orchestrator handoff endpoint.
+  if (backend === "mcs-new-harness") return "";
   return backend === "foundry" ? FOUNDRY_URL : MCS_URL;
 }
 
@@ -120,8 +139,14 @@ export const useSettingsStore = create<SettingsState>()(
       activeRegionId: "",
       directLineTokenUrl: DIRECTLINE_TOKEN_URL,
       cuaRunBaseUrl: CUA_RUN_BASE_URL,
+      newHarnessBaseUrl: NEW_HARNESS_BASE_URL,
       setOrchestratorUrl: (orchestratorUrl) => set({ orchestratorUrl }),
-      setBackend: (backend) => set({ backend, orchestratorUrl: urlForBackend(backend) }),
+      setBackend: (backend) => set({
+        backend,
+        orchestratorUrl: backend === "mcs"
+          ? get().regions.find((r) => r.id === get().activeRegionId)?.orchestratorUrl || MCS_URL
+          : urlForBackend(backend)
+      }),
       setCuaMode: (cuaMode) => set({ cuaMode }),
       setTypewriterCps: (typewriterCps) => set({ typewriterCps }),
       setActiveRegion: (id) => {
@@ -132,7 +157,8 @@ export const useSettingsStore = create<SettingsState>()(
           activeRegionId: region.id,
           directLineTokenUrl: region.directLineTokenUrl,
           cuaRunBaseUrl: cuaRunBaseUrlOverride() || region.cuaRunBaseUrl || CUA_RUN_BASE_URL,
-          ...(region.orchestratorUrl ? { orchestratorUrl: region.orchestratorUrl } : {})
+          newHarnessBaseUrl: newHarnessBaseUrlOverride() || region.newHarnessBaseUrl || NEW_HARNESS_BASE_URL,
+          ...(get().backend === "mcs" ? { orchestratorUrl: region.orchestratorUrl || MCS_URL } : {})
         });
       },
       hydrateRegions: (cfg) => {
@@ -153,7 +179,8 @@ export const useSettingsStore = create<SettingsState>()(
           activeRegionId,
           directLineTokenUrl: active?.directLineTokenUrl ?? DIRECTLINE_TOKEN_URL,
           cuaRunBaseUrl: cuaRunBaseUrlOverride() || active?.cuaRunBaseUrl || CUA_RUN_BASE_URL,
-          ...(active?.orchestratorUrl ? { orchestratorUrl: active.orchestratorUrl } : {})
+          newHarnessBaseUrl: newHarnessBaseUrlOverride() || active?.newHarnessBaseUrl || NEW_HARNESS_BASE_URL,
+          ...(get().backend === "mcs" ? { orchestratorUrl: active?.orchestratorUrl || MCS_URL } : {})
         });
       },
       resetToDefaults: () =>
@@ -178,13 +205,12 @@ export const useSettingsStore = create<SettingsState>()(
         typewriterCps: s.typewriterCps,
         activeRegionId: s.activeRegionId
       }),
-      // Recompute the endpoint from the (validated) backend on every rehydrate, and clamp a
-      // persisted 'foundry' selection back to the build default when this build did not bake a
-      // Foundry endpoint (so an old localStorage value can't strand the desktop on a dead URL).
+      // Keep the selected backend on reload; an unavailable endpoint must fail explicitly,
+      // never silently send the user's Foundry task to MCS.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
-        let backend: AgentBackend = p.backend === "foundry" ? "foundry" : "mcs";
-        if (backend === "foundry" && !BACKEND_SELECTABLE) backend = DEFAULT_BACKEND;
+        const backend: AgentBackend = p.backend === "foundry" || p.backend === "mcs" || p.backend === "mcs-new-harness"
+          ? p.backend : current.backend;
         return {
           ...current,
           ...p,

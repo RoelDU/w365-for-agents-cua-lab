@@ -56,7 +56,7 @@
     },
     "target_backend": {
       "type": "string",
-      "enum": ["mcs", "foundry"],
+      "enum": ["mcs", "foundry", "mcs-new-harness"],
       "description": "Which AI backend the presenter routed this handoff to (the desktop backend toggle). Consumers that drive the Cloud PC via Computer Use (e.g. the Foundry + W365A runner) MUST ignore a handoff not addressed to them, so two agents never drive the app at once. Omitted = legacy/unaddressed (any single configured consumer may act)."
     }
   },

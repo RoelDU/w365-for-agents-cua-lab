@@ -2,10 +2,14 @@ import * as React from "react";
 import { useToastsStore } from "@/stores/useToastsStore";
 import { Headphones, ShieldCheck } from "lucide-react";
 import { useT } from "@/stores/useLangStore";
+import { useRecoveryStore } from "@/lib/handoffRecovery";
 
 export function LoginScreen() {
   const t = useT();
   const push = useToastsStore((s) => s.push);
+  // A sign-in or reconnect redirect that returned no account is reported here, not dropped.
+  const authDiag = useRecoveryStore((s) => s.authDiag);
+  const signInProblem = authDiag && (authDiag.stage === "signin" || authDiag.stage === "reconnect") ? authDiag : null;
 
   const [signingIn, setSigningIn] = React.useState(false);
 
@@ -93,6 +97,21 @@ export function LoginScreen() {
               <MicrosoftLogo className="h-4 w-4" />
               {signingIn ? t("login.signingIn") : t("login.signInMicrosoft")}
             </button>
+
+            {signInProblem && (
+              <div
+                data-testid="login-auth-diagnostic"
+                role="alert"
+                className="mt-6 w-full rounded-md border border-danger-500/40 bg-danger-500/10 p-3 text-left text-xs text-slate-200"
+              >
+                <div className="font-semibold uppercase tracking-wider text-danger-500">{t("rail.authDiag.title")}</div>
+                <p className="mt-1 whitespace-pre-line break-words">{signInProblem.detail}</p>
+                <p className="mt-1 text-muted-400">
+                  <span className="font-mono">{signInProblem.code}</span>
+                  {signInProblem.request_id && <>{" · "}<span className="select-all break-all font-mono text-slate-100">{signInProblem.request_id}</span></>}
+                </p>
+              </div>
+            )}
 
             <div className="mt-6 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-500">
               <ShieldCheck className="h-3 w-3 text-accent-500/70" aria-hidden />

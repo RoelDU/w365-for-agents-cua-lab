@@ -1,0 +1,2 @@
+-r requirements.txt
+microsoft-agents-authentication-msal==1.7.0

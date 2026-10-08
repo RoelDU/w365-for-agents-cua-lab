@@ -1,4 +1,5 @@
-import type { CallContext, HandoffStatusPayload } from "@/types/contracts";
+import type { CallContext, HandoffStatusPayload, HandoffAcknowledgement } from "@/types/contracts";
+import { validateHandoffAcknowledgement, validateHandoffStatus } from "./schemas";
 
 export class OrchestratorError extends Error {
   status?: number;
@@ -6,12 +7,14 @@ export class OrchestratorError extends Error {
   /** The upstream response body (or its `details`/`error` field), surfaced so a bare
    * HTTP 502 reveals its real reason (e.g. "Could not start the Foundry agent run"). */
   details?: string;
-  constructor(message: string, opts?: { status?: number; cause?: unknown; details?: string }) {
+  fatal: boolean;
+  constructor(message: string, opts?: { status?: number; cause?: unknown; details?: string; fatal?: boolean }) {
     super(message);
     this.name = "OrchestratorError";
     this.status = opts?.status;
     this.cause = opts?.cause;
     this.details = opts?.details;
+    this.fatal = opts?.fatal ?? false;
   }
 }
 
@@ -39,16 +42,7 @@ async function readErrorDetails(response: Response): Promise<string | undefined>
   return text.slice(0, 500);
 }
 
-export interface PostHandoffResult {
-  request_id: string;
-  status: "queued" | "prefilled" | "ready" | "submitted" | "error";
-  /** Durable handoff id minted by the orchestrator backend. The browser holds
-   * this and polls `/handoff/{handoff_id}/status`; the backend owns the Direct
-   * Line conversation, watermark, and token. Replaces the old thread_id/run_id
-   * pair (the browser no longer touches the agent transport). */
-  handoff_id?: string;
-  status_url?: string;
-}
+export type PostHandoffResult = HandoffAcknowledgement;
 
 function joinUrl(base: string, path: string): string {
   return `${base.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
@@ -81,17 +75,27 @@ export async function postHandoff(
       { status: response.status, details }
     );
   }
-  const body = (await response.json().catch(() => ({}))) as Partial<PostHandoffResult>;
-  return {
-    request_id: body.request_id ?? payload.request_id,
-    status: body.status ?? "queued",
-    handoff_id: body.handoff_id,
-    status_url: body.status_url
-  };
+  let body: unknown = await response.json();
+  // The existing MCS service acknowledges only its handoff ID. Keep our original
+  // request ID for status correlation, but never replace an ID the service sent.
+  if (payload.target_backend !== "foundry" && body !== null && typeof body === "object" &&
+      !("request_id" in body) && "handoff_id" in body &&
+      typeof body.handoff_id === "string" && body.handoff_id.trim().length > 0) {
+    body = { ...body, request_id: payload.request_id };
+  }
+  if (!validateHandoffAcknowledgement(body) || body.request_id !== payload.request_id) {
+    throw new OrchestratorError("Invalid handoff acknowledgement or request ID does not match.", { fatal: true });
+  }
+  if (payload.target_backend === "foundry" && !body.execution_mode) {
+    throw new OrchestratorError("Foundry endpoint did not identify simulation or live mode. Use the updated local bridge and runner.", { fatal: true });
+  }
+  return body;
 }
 
 export interface GetHandoffStatusOptions {
   init?: RequestInit;
+  requestId?: string;
+  executionMode?: "simulation" | "live" | null;
 }
 
 export async function getHandoffStatus(
@@ -113,7 +117,17 @@ export async function getHandoffStatus(
       { status: response.status, details }
     );
   }
-  return (await response.json()) as HandoffStatusPayload;
+  const body: unknown = await response.json();
+  if (!validateHandoffStatus(body)) {
+    throw new OrchestratorError("Invalid handoff status response.", { fatal: true });
+  }
+  if (opts.requestId && body.request_id !== opts.requestId) {
+    throw new OrchestratorError("Handoff status request ID does not match this interaction.", { fatal: true });
+  }
+  if (opts.executionMode && body.execution_mode !== opts.executionMode) {
+    throw new OrchestratorError("Foundry execution mode changed or is missing in the status response.", { fatal: true });
+  }
+  return body;
 }
 
 /**
@@ -122,14 +136,18 @@ export async function getHandoffStatus(
  */
 export async function pingOrchestrator(
   baseUrl: string,
-  timeoutMs = 1500
+  timeoutMs = 1500,
+  backend?: "mcs" | "foundry"
 ): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const url = joinUrl(baseUrl, "/health");
     const res = await fetch(url, { method: "GET", signal: controller.signal });
-    return res.ok;
+    if (!res.ok) return false;
+    if (backend !== "foundry") return true;
+    const body = await res.json() as { foundry?: { available?: boolean } };
+    return body.foundry?.available === true;
   } catch {
     return false;
   } finally {

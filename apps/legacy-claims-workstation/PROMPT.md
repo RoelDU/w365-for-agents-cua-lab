@@ -15,8 +15,7 @@
 ## Role
 
 You are building a complete native Windows desktop application from scratch in
-the **`apps/legacy-claims-workstation/`** folder of the **`RoelDU/w365-for-agents-cua-lab`**
-monorepo (working directory:
+the **`apps/legacy-claims-workstation/`** folder of this lab repository (working directory:
 `C:\Dev\Work\CCaaSDemoApp\apps\legacy-claims-workstation`). Treat this folder
 as the root of your build. **Only modify files under this folder.** Do not
 touch anything under `..\..\apps\ccaas-agent-desktop\`,
@@ -310,7 +309,7 @@ The default startup sequence (unless flags below override it) must be:
 ### Authentication-simulation override flags
 
 The legacy auth flow is great for partner-led demos but slows down
-CUA-driven flows. Provide these flags so Roel can choose at demo time:
+CUA-driven flows. Provide these flags so the presenter can choose at demo time:
 
 | Flag | Behavior |
 | ---- | -------- |
@@ -718,7 +717,7 @@ Document three deployment paths in `INTEGRATION.md`:
     would hand to the agent (caller_phone, policy_number, intent,
     summary, transcript_excerpt).
   - `evaluations/` — CSV test batches for the Copilot Studio /
-    Foundry Evaluation feature so Roel can validate the agent
+    Foundry Evaluation feature so the maintainer can validate the agent
     end-to-end against the legacy app **before** a live partner
     demo. Mirror the cobol-banker-demo pattern:
     - `evaluation-1-smoke.csv` — 5 tests: launch, login, hero record
@@ -843,4 +842,4 @@ app/agent seam.
       if tooling is available) on tag push
 - [ ] MIT `LICENSE`
 - [ ] Leave the repository in a complete, buildable state. **Do not commit,
-      push, or tag yourself** — Roel will review and push manually.
+      push, or tag yourself** — the maintainer will review and push manually.

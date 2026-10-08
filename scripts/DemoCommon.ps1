@@ -108,13 +108,12 @@ function Get-DemoConfig {
     #>
     param(
         [Parameter(Mandatory)][string]$Path,
-        # Validate the Foundry block needed to create the Computer-Use agent and run the
-        # samples/foundry-w365a-runner backend (foundry.endpoint/agentName/modelDeployment/
-        # apiVersion + a default orchestratorUrl). Used for -AgentBackend foundry|both.
+        # Validate the Foundry block used by older helper paths. New hosted-agent
+        # installs use deploy\foundry\Deploy-FoundryAgent.ps1.
         [switch]$RequireFoundry,
         # Additionally validate the fields that ONLY the deprecated SWA-managed /api path
         # consumes (appRegistration.clientId + foundry.tokenAudience). The first-class
-        # runner backend does not use these, so they are gated on the legacy -IncludeFoundryAgent.
+        # hosted relay backend does not use these, so they are gated on the legacy -IncludeFoundryAgent.
         [switch]$RequireLegacyFoundryApi,
         # Validate the handoffOrchestrator block (the current AI invocation path).
         [switch]$RequireOrchestrator
@@ -146,7 +145,7 @@ function Get-DemoConfig {
     # Low-touch resource naming. The globally-unique resource names (Static Web App,
     # Function app, Storage, Key Vault) may be left BLANK in the config. When blank, we
     # derive a stable, unique-per-subscription name so the user only has to provide
-    # subscription, tenant, region and the Direct Line secret. The names are a
+    # subscription, tenant, and region. The names are a
     # deterministic function of the subscription id, so re-runs AND teardown compute the
     # same names and reuse the same resources. Set an explicit name to override.
     function Set-OrAddProp {
@@ -202,29 +201,21 @@ function Get-DemoConfig {
         }
     }
 
-    # Foundry agent fields are needed both to create the Computer-Use agent (Deploy-Agent)
-    # and to run the samples/foundry-w365a-runner backend. The runner authenticates with its
-    # own @azure/identity credentials (its .env), so the SWA app registration is NOT required
-    # here - that is gated separately on the legacy SWA /api path below.
+    # Foundry agent fields are retained for older helper paths. The current hosted relay
+    # path is configured through deploy\foundry and Function app FOUNDRY_* settings.
     if ($RequireFoundry) {
         Test-Field $cfg.foundry 'endpoint'        'foundry.endpoint'        | Out-Null
         Test-Field $cfg.foundry 'agentName'       'foundry.agentName'       | Out-Null
         Test-Field $cfg.foundry 'modelDeployment' 'foundry.modelDeployment' | Out-Null
         Test-Field $cfg.foundry 'apiVersion'      'foundry.apiVersion'      | Out-Null
-        # Desktop endpoint for the Foundry + W365A backend: the local-orchestrator paired
-        # with samples/foundry-w365a-runner (the orchestrator serves HTTP; the runner watches
-        # its file-drop). Baked into the SPA as VITE_FOUNDRY_ORCHESTRATOR_URL. Defaults to the
-        # standard local-orchestrator URL when left blank so a new user does not have to know
-        # it up front.
         if ($cfg.foundry -and [string]::IsNullOrWhiteSpace([string]$cfg.foundry.orchestratorUrl)) {
-            Set-OrAddProp $cfg.foundry 'orchestratorUrl' 'http://localhost:4000'
-            Write-Host "  [info] foundry.orchestratorUrl was blank; using default '$($cfg.foundry.orchestratorUrl)' (the local-orchestrator paired with the W365A runner)."
+            Set-OrAddProp $cfg.foundry 'orchestratorUrl' ''
         }
     }
 
     # The deprecated SWA-managed /api calls Foundry directly using the SWA's app registration
     # (client-credentials) and a token audience. Only that legacy opt-in path needs these; the
-    # first-class runner backend does not.
+    # hosted relay backend does not.
     if ($RequireLegacyFoundryApi) {
         Test-Field $cfg.appRegistration 'clientId' 'appRegistration.clientId' | Out-Null
         Test-Field $cfg.foundry 'tokenAudience'   'foundry.tokenAudience'   | Out-Null
@@ -282,7 +273,7 @@ function Get-DemoConfig {
     if ($problems.Count -gt 0) {
         $msg = "demo-config.local.json is incomplete. Fill in these field(s): $($problems -join ', '). See scripts\demo-config.sample.json for guidance."
         if ($problems | Where-Object { $_ -like 'foundry.*' }) {
-            $msg += " The Foundry backend needs a Microsoft Foundry project first: create or locate one, then copy its Project endpoint into foundry.endpoint. Step-by-step (project + resource, RBAC, computer-use-preview access and deployment): docs\agent-cua-setup.md > 'Prerequisites (one-time, greenfield)'."
+            $msg += " The Foundry backend needs a Microsoft Foundry project first: create or locate one, then copy its Project endpoint into foundry.endpoint. Step-by-step (project + resource, RBAC, computer-use-preview access and deployment): docs\\install\\06-foundry-path.md."
         }
         throw $msg
     }
@@ -578,7 +569,7 @@ function Test-CopilotStudioReady {
     # build - if no Dataverse-backed Power Platform environment exists, instead of
     # letting the user discover it later at the portal. It cannot create the agent
     # (no public API) or provision Dataverse (a licensed, opinionated, async tenant
-    # action); it only detects and points at docs/build-the-agent.md.
+    # action); it only detects and points at the install guide.
     #
     # It also surfaces each Dataverse environment's GEOGRAPHY and warns when none
     # matches the configured workload region: the Copilot Studio Computer Use Cloud
@@ -594,7 +585,7 @@ function Test-CopilotStudioReady {
         $tenant = (& az account show --query tenantId -o tsv 2>$null)
         $token = (& az account get-access-token --resource "https://service.powerapps.com/" --query accessToken -o tsv 2>$null)
         if ([string]::IsNullOrWhiteSpace($token)) {
-            Write-Host "  [skip] No Power Platform token (az not signed in, or no Power Platform access). Skipping; verify Copilot Studio manually per docs/build-the-agent.md (Preflight)." -ForegroundColor Yellow
+            Write-Host "  [skip] No Power Platform token (az not signed in, or no Power Platform access). Skipping; verify Copilot Studio manually per docs\install\05-mcs-path.md." -ForegroundColor Yellow
             return
         }
         if (-not [string]::IsNullOrWhiteSpace($tenant)) {
@@ -637,7 +628,7 @@ function Test-CopilotStudioReady {
                     Write-Host ("         Cloud PC pool (and CPCPool_* devices) will be created in '{0}', not '{1}'." -f ($geos | Sort-Object -Unique | Select-Object -First 1), $wantGeo) -ForegroundColor Yellow
                     Write-Host "         To get the pool in your configured region, first create a Dataverse environment in" -ForegroundColor Yellow
                     Write-Host ("         the '{0}' geo (admin.powerplatform.microsoft.com -> Environments -> New) and build the" -f $wantGeo) -ForegroundColor Yellow
-                    Write-Host "         agent there. See docs/w365a-pool.md (geography) and docs/build-the-agent.md." -ForegroundColor Yellow
+                    Write-Host "         agent there. See docs\w365a-pool.md and docs\install\05-mcs-path.md." -ForegroundColor Yellow
                 }
                 elseif ($geos -contains $wantGeo) {
                     Write-Host ("         [ok] A Dataverse environment exists in your configured geo '{0}' - build the agent there so the Cloud PC pool lands in the right region." -f $wantGeo)
@@ -646,16 +637,16 @@ function Test-CopilotStudioReady {
 
             Write-Host "         Note: this only confirms Dataverse exists - it does NOT validate Copilot Studio"
             Write-Host "         licensing, region availability, or your maker access in that environment."
-            Write-Host "         If publishing the agent later shows a '60-day trial' prompt, see"
-            Write-Host "         docs/licensing-and-entitlement.md (durable pay-as-you-go entitlement)."
+            Write-Host "         If publishing the agent later shows an entitlement prompt, review"
+            Write-Host "         docs\install\01-prerequisites.md."
             return
         }
 
         Write-Host ""
         Write-Host "  [warn] No Dataverse-backed Power Platform environment was found in this tenant." -ForegroundColor Yellow
         Write-Host "         Copilot Studio (README Step 3) requires Dataverse; without it the portal only" -ForegroundColor Yellow
-        Write-Host "         ever shows the spinning 'loading donut', so you cannot create the agent or get" -ForegroundColor Yellow
-        Write-Host "         its Direct Line secret. This does NOT block the rest of this build." -ForegroundColor Yellow
+        Write-Host "         ever shows the spinning 'loading donut', so you cannot create the agent." -ForegroundColor Yellow
+        Write-Host "         This does NOT block the rest of this build." -ForegroundColor Yellow
         if ($envs.Count -gt 0) {
             Write-Host "         Environments seen (all without Dataverse):" -ForegroundColor Yellow
             foreach ($e in $envs) {
@@ -671,32 +662,30 @@ function Test-CopilotStudioReady {
             Write-Host ("         Pick the '{0}' geo to match azure.location '{1}' so the Cloud PC pool lands in your" -f $wantGeo, $WorkloadRegion) -ForegroundColor Yellow
             Write-Host "         region (the pool inherits the ENVIRONMENT's geography, not azure.location)." -ForegroundColor Yellow
         }
-        Write-Host "         docs/build-the-agent.md (Preflight)." -ForegroundColor Yellow
+        Write-Host "         docs\install\05-mcs-path.md." -ForegroundColor Yellow
         Write-Host ""
     }
     catch {
-        Write-Host "  [skip] Could not complete the Copilot Studio preflight ($($_.Exception.Message)). Skipping; verify Copilot Studio manually per docs/build-the-agent.md (Preflight)." -ForegroundColor Yellow
+        Write-Host "  [skip] Could not complete the Copilot Studio preflight ($($_.Exception.Message)). Skipping; verify Copilot Studio manually per docs\install\05-mcs-path.md." -ForegroundColor Yellow
         return
     }
 }
 
 function New-DemoHandoffOrchestrator {
     <#
-        Deploys the standalone Azure Durable Functions handoff orchestrator
-        (apps/handoff-orchestrator) that drives the published Microsoft Copilot
-        Studio agent over Bot Framework Direct Line. Idempotent and -WhatIf-safe.
+        Deploys the Azure Functions handoff service (apps/handoff-orchestrator).
+        It hosts the MCS Dataverse-trigger path and the Foundry hosted-agent relay.
+        Idempotent and -WhatIf-safe.
 
         Creates (or reuses) the resource group, a Storage account (Durable backing
         store), the Function app (Linux consumption, Node 24, Functions v4, with a
         system-assigned managed identity), and a Key Vault (access-policy mode for
-        deterministic identity grants). Stores the Direct Line secret + the result-
-        callback key in Key Vault, grants the Function app's identity GET on them,
-        wires them into the app as Key Vault references, publishes the code, and
-        restarts the app so the references resolve.
+        deterministic identity grants for older settings), publishes the code, and
+        restarts the app.
 
         Returns { FunctionAppName, ResourceGroup, Location, BaseUrl, CallbackKey,
         KeyVaultName }. BaseUrl ends in /api so the desktop SPA (which appends
-        /handoff, /health, ...) points straight at the Functions routes.
+        /cua-run and /foundry-claims) points straight at the Functions routes.
     #>
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
@@ -704,7 +693,7 @@ function New-DemoHandoffOrchestrator {
         [Parameter(Mandatory)][string]$RepoRoot
     )
 
-    Write-Host "`n=== AI handoff backend: Azure Durable Functions orchestrator (Copilot Studio + Direct Line) ==="
+    Write-Host "`n=== AI handoff backend: Azure Functions handoff service ==="
     $o = $Config.handoffOrchestrator
     if (-not $o) { throw "handoffOrchestrator config block is missing. See scripts\demo-config.sample.json." }
 
@@ -923,6 +912,61 @@ function New-DemoHandoffOrchestrator {
         if (-not [string]::IsNullOrWhiteSpace($engToken)) {
             $settings['ENGINE_TOKEN'] = "@Microsoft.KeyVault(VaultName=$kv;SecretName=EngineToken)"
         }
+
+        # Current MCS path: Zava -> /api/cua-run -> Dataverse trigger row ->
+        # Power Automate trigger flow -> Copilot Studio Computer Use. These values
+        # are not secrets; the Function app's managed identity is authorized in
+        # Dataverse as an application user.
+        $dv = $o.dataverse
+        if ($dv) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$dv.orgUrl)) { $settings['DATAVERSE_ORG_URL'] = [string]$dv.orgUrl }
+            if (-not [string]::IsNullOrWhiteSpace([string]$dv.cuaAgentBotId)) { $settings['CUA_AGENT_BOTID'] = [string]$dv.cuaAgentBotId }
+            if (-not [string]::IsNullOrWhiteSpace([string]$dv.triggerEntitySet)) { $settings['CUA_TRIGGER_ENTITYSET'] = [string]$dv.triggerEntitySet }
+            if (-not [string]::IsNullOrWhiteSpace([string]$dv.triggerIdAttr)) { $settings['CUA_TRIGGER_ID_ATTR'] = [string]$dv.triggerIdAttr }
+            if (-not [string]::IsNullOrWhiteSpace([string]$dv.region)) { $settings['CUA_REGION'] = [string]$dv.region }
+            if ($dv.PSObject.Properties.Name -contains 'requireRealResult') { $settings['CUA_REQUIRE_REAL_RESULT'] = if ([bool]$dv.requireRealResult) { '1' } else { '0' } }
+            if ($dv.PSObject.Properties.Name -contains 'progressMock') { $settings['CUA_PROGRESS_MOCK'] = if ([bool]$dv.progressMock) { '1' } else { '0' } }
+
+            $tf = $dv.triggerFields
+            if ($tf) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$tf.policyNumber)) { $settings['CUA_TRIGGER_FIELD_POLICY'] = [string]$tf.policyNumber }
+                if (-not [string]::IsNullOrWhiteSpace([string]$tf.summary)) { $settings['CUA_TRIGGER_FIELD_SUMMARY'] = [string]$tf.summary }
+                if (-not [string]::IsNullOrWhiteSpace([string]$tf.correlation)) { $settings['CUA_TRIGGER_FIELD_CORRELATION'] = [string]$tf.correlation }
+                if (-not [string]::IsNullOrWhiteSpace([string]$tf.lang)) { $settings['CUA_TRIGGER_FIELD_LANG'] = [string]$tf.lang }
+                if (-not [string]::IsNullOrWhiteSpace([string]$tf.handoffContext)) { $settings['CUA_TRIGGER_FIELD_HANDOFF_CONTEXT'] = [string]$tf.handoffContext }
+            }
+            $rf = $dv.resultFields
+            if ($rf) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$rf.claimId)) { $settings['CUA_RESULT_FIELD_CLAIMID'] = [string]$rf.claimId }
+                if (-not [string]::IsNullOrWhiteSpace([string]$rf.status)) { $settings['CUA_RESULT_FIELD_STATUS'] = [string]$rf.status }
+                if (-not [string]::IsNullOrWhiteSpace([string]$rf.receipt)) { $settings['CUA_RESULT_FIELD_RECEIPT'] = [string]$rf.receipt }
+            }
+        }
+
+        # Current Foundry path: browser obtains a relay access token for the
+        # signed-in user; this Function app validates it and forwards to the
+        # hosted agent using its managed identity.
+        $relay = $o.foundryRelay
+        if ($relay) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$relay.invocationsUrl)) { $settings['FOUNDRY_INVOCATIONS_URL'] = [string]$relay.invocationsUrl }
+            if (-not [string]::IsNullOrWhiteSpace([string]$relay.tenantId)) { $settings['FOUNDRY_RELAY_TENANT_ID'] = [string]$relay.tenantId }
+            if (-not [string]::IsNullOrWhiteSpace([string]$relay.clientId)) { $settings['FOUNDRY_RELAY_CLIENT_ID'] = [string]$relay.clientId }
+            if ($relay.PSObject.Properties.Name -contains 'claimsReady') { $settings['FOUNDRY_CLAIMS_READY'] = if ([bool]$relay.claimsReady) { '1' } else { '0' } }
+            # Cloud PC capacity gate for new Foundry starts (docs\install\07 section 6.2a).
+            if (-not [string]::IsNullOrWhiteSpace([string]$relay.cloudPcPoolId)) { $settings['FOUNDRY_CLOUDPC_POOL_ID'] = [string]$relay.cloudPcPoolId }
+            if ($relay.PSObject.Properties.Name -contains 'capacityGate') { $settings['FOUNDRY_CAPACITY_GATE'] = if ([bool]$relay.capacityGate) { '1' } else { '0' } }
+        }
+
+        # Values created on later install pages may still be sample placeholders here;
+        # leave those settings unset rather than writing a placeholder (docs\install\07).
+        foreach ($k in @($settings.Keys)) {
+            $v = [string]$settings[$k]
+            if ($v -match '[<>]' -or $v -match 'YOUR-ORG' -or $v -match '^0{8}-0{4}-0{4}-0{4}-0{12}$') {
+                Write-Host "  [skip] $k is still a placeholder in the config; set it later (docs\install\07-handoff-and-zava.md)."
+                $settings.Remove($k)
+            }
+        }
+
         # Pass settings via an @file so Key Vault reference values containing
         # '(' ';' ')' survive the az.cmd -> cmd.exe argument re-parsing on Windows.
         $settingsFile = Write-AppSettingsFile -Settings $settings
@@ -1116,7 +1160,7 @@ function New-DemoStaticWebApp {
         # config. When empty the SPA falls back to its built-in default ("/api").
         [string]$OrchestratorUrl,
         # Desktop endpoint for the Foundry + W365A backend (the local-orchestrator paired
-        # with samples/foundry-w365a-runner - the orchestrator serves HTTP, the runner watches
+        # with the hosted Foundry relay.
         # its file-drop). Baked as VITE_FOUNDRY_ORCHESTRATOR_URL so
         # the SPA's backend toggle can switch to it. Empty => toggle hidden (single backend).
         [string]$FoundryOrchestratorUrl,

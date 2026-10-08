@@ -1,0 +1,11 @@
+**
+!schemas
+!schemas/call-context.schema.json
+!schemas/result.schema.json
+!schemas/error.schema.json
+!samples
+!samples/foundry-hosted-claims
+!samples/foundry-hosted-claims/pyproject.toml
+!samples/foundry-hosted-claims/hosted_claims
+!samples/foundry-hosted-claims/hosted_claims/*.py
+!samples/foundry-hosted-claims/hosted_claims/viewer.html

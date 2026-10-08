@@ -12,6 +12,8 @@ claims.log
 # Exception: prebuilt Intune packages for the in-tenant admin workstation ARE
 # tracked, so a build-less admin box can `git pull` and deploy without compiling.
 !deploy/intune-packages/*.intunewin
+# Same for the standalone Foundry demo preparation package (no configuration inside).
+!deploy/foundry-demo-prep/*.zip
 
 # ─── CCaaS Agent Desktop (React/Vite/TS, apps/ccaas-agent-desktop/) ───
 **/node_modules/
@@ -31,6 +33,8 @@ claims.log
 # secret used at deploy time). NEVER committed; copy demo-config.sample.json to
 # demo-config.local.json and fill it in. The *.sample.json template IS tracked.
 **/*.local.json
+# A filled-in Foundry demo preparation configuration is environment-specific.
+**/foundry-demo.config.json
 
 # ─── Local Orchestrator (samples/local-orchestrator/) ───
 **/orchestrator.log
@@ -50,5 +54,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Scout read-only Graph credentials (never commit)
+# Local read-only Graph credentials (never commit)
 .scout.env
+
+# Private working tickets/specs (Matt Pocock skills) — never pushed to the public repo
+.scratch/
+
+# Copilot Studio agent backups written by scripts/mcs/publish_mcs_agent_config.py
+scripts/mcs/backups/
+# Python caches
+__pycache__/
+*.pyc

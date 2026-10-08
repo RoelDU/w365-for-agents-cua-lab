@@ -42,7 +42,7 @@ describe("transfer-to-AI handover modal — context card + JSON disclosure", () 
     fireEvent.click(transferBtn);
 
     await screen.findByTestId("transfer-directory");
-    const aiDestination = await screen.findByTestId("handoff-to-ai");
+    const aiDestination = await screen.findByTestId("handoff-to-ai-mcs");
     expect(aiDestination).toHaveAccessibleName(/Transfer to AI Agent/i);
     expect(aiDestination).toHaveTextContent(/Claims Automation Agent/i);
     fireEvent.click(aiDestination);

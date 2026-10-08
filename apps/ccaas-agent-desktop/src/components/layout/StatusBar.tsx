@@ -8,14 +8,15 @@ import { useT } from "@/stores/useLangStore";
 
 const BACKEND_LABELS: Record<AgentBackend, string> = {
   mcs: "Copilot Studio",
-  foundry: "Foundry + W365A"
+  foundry: "Foundry + W365A",
+  "mcs-new-harness": "MCS - new harness (experimental)"
 };
 
 function BackendToggle() {
   const backend = useSettingsStore((s) => s.backend);
   const setBackend = useSettingsStore((s) => s.setBackend);
   const t = useT();
-  if (!BACKEND_SELECTABLE) return null;
+  if (!BACKEND_SELECTABLE && backend !== "foundry") return null;
   return (
     <span data-testid="backend-toggle" className="flex items-center gap-1">
       <span className="text-muted-500">{t("status.agent")}:</span>
@@ -26,6 +27,7 @@ function BackendToggle() {
             type="button"
             data-testid={`backend-option-${b}`}
             aria-pressed={backend === b}
+            aria-label={BACKEND_LABELS[b]}
             onClick={() => setBackend(b)}
             className={
               "px-1.5 py-0.5 normal-case transition-colors " +
@@ -45,11 +47,16 @@ export function StatusBar() {
   const orchestratorUrl = useSettingsStore((s) => s.orchestratorUrl);
   const backend = useSettingsStore((s) => s.backend);
   const cuaMode = useSettingsStore((s) => s.cuaMode);
+  const newHarnessBaseUrl = useSettingsStore((s) => s.newHarnessBaseUrl);
+  // The new-harness destination never uses the orchestrator; show its own relay service.
+  const statusUrl = backend === "mcs-new-harness" ? newHarnessBaseUrl : orchestratorUrl;
 
   // On the MCS path with no VITE_ORCHESTRATOR_URL baked, orchestratorUrl is the deprecated
   // SWA-managed /api (Foundry) that 502s the handoff. Flag it as misconfigured up front so
   // the presenter sees the problem before attempting a handoff, not after a 502.
-  const unconfigured = backend === "mcs" && !MCS_URL_CONFIGURED && orchestratorUrl === "/api";
+  const unconfigured =
+    (backend === "mcs" && !MCS_URL_CONFIGURED && orchestratorUrl === "/api") ||
+    (backend === "mcs-new-harness" && !newHarnessBaseUrl);
 
   const [orchestratorOnline, setOrchestratorOnline] = React.useState<boolean | null>(null);
   React.useEffect(() => {
@@ -58,8 +65,9 @@ export function StatusBar() {
       return;
     }
     let alive = true;
+    setOrchestratorOnline(null);
     const probe = async () => {
-      const ok = await pingOrchestrator(orchestratorUrl);
+      const ok = await pingOrchestrator(statusUrl, 1500, backend === "mcs-new-harness" ? undefined : backend);
       if (alive) setOrchestratorOnline(ok);
     };
     probe();
@@ -68,7 +76,7 @@ export function StatusBar() {
       alive = false;
       clearInterval(id);
     };
-  }, [orchestratorUrl, unconfigured]);
+  }, [statusUrl, unconfigured, backend]);
 
   return (
     <footer
@@ -97,11 +105,13 @@ export function StatusBar() {
                       : t("status.orchestratorUnreachableAria")
                 }
               />
-              {t("status.orchestrator")}: <span className="font-mono normal-case">{orchestratorUrl}</span>
+              {t("status.orchestrator")}: <span className="font-mono normal-case">{statusUrl}</span>
             </span>
           </TooltipTrigger>
           <TooltipContent>
-            {unconfigured
+            {backend === "foundry"
+              ? t("status.foundryTip")
+              : unconfigured
               ? t("status.orchestratorUnconfiguredTip")
               : orchestratorOnline === null
                 ? t("status.orchestratorCheckingTip")

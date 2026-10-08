@@ -14,6 +14,7 @@ import { intentLabel } from "@/lib/format";
 import type { CallContext } from "@/types/contracts";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useT, useLang } from "@/stores/useLangStore";
+import { useSettingsStore } from "@/stores/useSettingsStore";
 
 interface HandoffModalProps {
   open: boolean;
@@ -25,6 +26,8 @@ interface HandoffModalProps {
   submitting: boolean;
   cuaMode: boolean;
   buildPreview: (summary: string) => CallContext | null;
+  /** Why Confirm did not start the transfer (e.g. no Cloud PC free); the dialog stays open. */
+  notice?: string | null;
 }
 
 export function HandoffModal({
@@ -36,10 +39,12 @@ export function HandoffModal({
   intentLabelText,
   submitting,
   cuaMode,
-  buildPreview
+  buildPreview,
+  notice = null
 }: HandoffModalProps) {
   const t = useT();
   const lang = useLang();
+  const viaTrigger = !!useSettingsStore((s) => s.cuaRunBaseUrl);
   const [summary, setSummary] = React.useState(summarySeed);
   const [showJson, setShowJson] = React.useState(false);
   const preview = buildPreview(summary);
@@ -48,14 +53,15 @@ export function HandoffModal({
   }, [open, summarySeed]);
 
   // CUA mode: auto-confirm after a short visible delay so a CUA driving the
-  // CCaaS desktop sees the modal but doesn't have to click through it.
+  // CCaaS desktop sees the modal but doesn't have to click through it. Not again
+  // after a refusal is shown: a person decides whether to confirm once more.
   React.useEffect(() => {
-    if (!open || !cuaMode || submitting) return;
+    if (!open || !cuaMode || submitting || notice) return;
     const id = setTimeout(() => {
       onConfirm(summary);
     }, 1000);
     return () => clearTimeout(id);
-  }, [open, cuaMode, submitting, summary, onConfirm]);
+  }, [open, cuaMode, submitting, summary, onConfirm, notice]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -74,7 +80,9 @@ export function HandoffModal({
                 Twilio のタスク属性、D365 Contact Center の <code>msdyn_*</code>{" "}
                 変数）と同様に、構造化された JSON エンベロープとして転送に付随します。
                 ここではこのワークスペースが <strong>CCaaS チャネル</strong>であり、
-                Direct Line チャネルアダプター経由でエージェントに接続されています。
+                {viaTrigger
+                  ? "コンテキストを Dataverse 行として書き込み、その行がエージェントのトリガーフローを開始します。"
+                  : "Direct Line チャネルアダプター経由でエージェントに接続されています。"}
                 Tier-1 の本番環境では、同じエージェントがプラットフォーム標準の
                 コネクターに接続されます。エージェントはレガシーの請求業務システムを開き、
                 初回事故報告（FNOL）を登録し、請求IDがここに返されます。
@@ -86,8 +94,11 @@ export function HandoffModal({
                 transfer as a structured JSON envelope — the model real platforms
                 use today (Connect contact attributes, Twilio task attributes, D365
                 Contact Center <code>msdyn_*</code> variables). Here this workspace
-                is the <strong>CCaaS channel</strong>, connected to the agent over a
-                Direct Line channel adapter; in a Tier-1 deployment the same agent
+                is the <strong>CCaaS channel</strong>,{" "}
+                {viaTrigger
+                  ? "which writes the context to a Dataverse row that starts the agent's trigger flow;"
+                  : "connected to the agent over a Direct Line channel adapter;"}{" "}
+                in a Tier-1 deployment the same agent
                 plugs into the platform&rsquo;s native connector instead.
                 The agent opens the legacy claims workstation,
                 submits the FNOL, and the claim ID returns here.
@@ -213,6 +224,11 @@ export function HandoffModal({
             )}
           </div>
         </div>
+        {notice && (
+          <p data-testid="handoff-capacity-notice" role="status" className="px-1 text-xs text-warn-500">
+            {notice}
+          </p>
+        )}
         <DialogFooter>
           <Button
             variant="ghost"

@@ -32,7 +32,37 @@ export type DirectLineUpdateType =
   | "screenshot"
   | "claim"
   | "error"
-  | "done";
+  | "done"
+  | "step"
+  | "activity"
+  | "release";
+
+/** One logged Computer Use action, exactly as recorded by the platform. */
+export interface LiveStep {
+  /** The agent's own explanation for this action; null when none was logged. */
+  explanation: string | null;
+  /** Simulation-only note (never an agent explanation). */
+  note?: string | null;
+  action: string | null;
+  application: string | null;
+  at: string | null;
+  /** The screenshot logged with this action, or null when none was logged. */
+  imageUrl: string | null;
+}
+
+/** Whether the shown activity is proven to belong to this handoff. */
+export interface LiveActivity {
+  state: string;
+  message?: string;
+  simulated?: boolean;
+}
+
+/** Cloud PC release, reported separately from the claim result. */
+export interface LiveRelease {
+  state: "unknown" | "pending" | "released" | "ended" | "ended-with-error";
+  at?: string;
+  detail?: string;
+}
 
 export interface DirectLineUpdate {
   type: DirectLineUpdateType;
@@ -44,6 +74,12 @@ export interface DirectLineUpdate {
   claimId?: string;
   /** Human-readable reason (for "error"). */
   errorMessage?: string;
+  /** Logged action (for "step"). */
+  step?: LiveStep;
+  /** Attribution state (for "activity"). */
+  activity?: LiveActivity;
+  /** Cloud PC release (for "release"). */
+  release?: LiveRelease;
 }
 
 export class DirectLineError extends Error {

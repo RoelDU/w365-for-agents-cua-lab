@@ -1,326 +1,123 @@
-# Windows 365 for Agents + Computer Use lab
+# Windows 365 for Agents CUA lab
 
-A hands-on lab for building **agentic automation** on **Windows 365 for Agents (W365A)** with
-**Microsoft Copilot Studio Computer Use (CUA)**. The first demo here: a Copilot Studio agent
-picks up a contact-center call from a modern CCaaS desktop, drives a **legacy Windows claims
-app** end-to-end on a W365A Cloud PC, and returns the result to the caller — **with no API into
-the legacy system.** More CUA + W365A scenarios will be added over time.
+A hands-on lab for a contact-centre handoff to AI on **Windows 365 for Agents**. A human agent
+uses the **Zava CCaaS Agent Desktop** web app, transfers a simulated claims call, and watches
+an AI agent file the claim in the **Legacy Claims Workstation**, a Win32 app with no API, by
+operating it on a Cloud PC. The result comes back to the same Zava interaction.
 
-> **The wedge:** partners have spent years saying *"we can't automate that workflow —
-> there's no API on the legacy system."* This demo gives them a new answer.
+The same handoff can go to either of **two supported backends**:
 
----
+- **Copilot Studio (MCS):** a Copilot Studio agent with the Computer Use tool, on a Copilot
+  Studio Cloud PC pool.
+- **Microsoft Foundry:** a pro-code Python hosted agent that uses the Windows 365 for Agents
+  Computer Use MCP server, on a Windows 365 for Agents Cloud PC pool, with the agent's own
+  session shown live (view-only) in Zava.
 
 ## Demo
 
-**▶ Watch the 2.5-minute demo video** (press play below):
-
 https://github.com/user-attachments/assets/10913efc-8abc-475b-8674-12b46245edfa
 
-A ~2.5 min guided walkthrough (English): the end-to-end call → hand-off → AI files the claim, the Copilot Studio configuration, and the Computer Use audit trail (screenshots + reasoning for every step).
-
-> **Available in Japanese too.** The Agent Desktop UI switches between English and Japanese with the **EN / 日本語** toggle in the top bar (the AI agent also narrates in the selected language). Japanese walkthrough: [`docs/media/zava-ccaas-demo-guided-ja.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-ja.mp4?raw=1).
-
-### Want to stand this up yourself?
-
-1. **[How it works](#how-it-works)** — the architecture in 3 parts.
-2. **[Prerequisites](#prerequisites)** — what to have ready (tenant, Cloud PCs, Copilot Studio).
-3. **Deploy — pick one:**
-   - 🤖 **[Let an AI agent do it](#deploy-it-with-an-ai-agent-copilot)** (fastest — an agent like Microsoft Scout drives the portal/admin steps as you, with your review), or
-   - 🛠️ **[Deploy it yourself](#deploy-the-demo)** (one script + one config file).
-4. **[Test, reset, and tear down](#test-reset-and-tear-down)**.
-
----
+This 2.5-minute walkthrough was recorded in June 2026 and shows the **Copilot Studio** path
+(English). Japanese:
+[`zava-ccaas-demo-guided-ja.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-ja.mp4?raw=1).
+The Foundry path and the current transfer screens are newer than the recording.
 
 ## How it works
 
-1. **CCaaS Agent Desktop** — a modern web app; the *human* agent's screen. The call
-   arrives and the human clicks **"Hand off to AI."**
-2. **The AI agent** — a **Copilot Studio** agent (invoked over **Direct Line**) with
-   **Computer Use**. It operates a Windows desktop by *looking at the screen and
-   clicking* — no API into the legacy system.
-3. **Legacy Claims Workstation** — a deliberately old Win32 app (`claims.exe`) the AI drives.
-
-**Two separate Cloud PCs — don't confuse them:**
-
-| Component | What it is | Who uses it | What's deployed |
-|---|---|---|---|
-| **Agent workstation** | A Windows 365 Cloud PC (Enterprise / Flex / Frontline) | The **human** agent signs in | The **CCaaS Agent Desktop**, as an **Edge force-installed web app (PWA)** with a desktop icon |
-| **W365A pool** | A **separate** Windows 365 for Agents Cloud PC | The **AI agent** runs here — no human signs in | The **legacy Claims app** (`claims.exe`) |
-
-**The flow:** a call hits the CCaaS desktop → the human clicks **Hand off to AI** → the
-**handoff orchestrator** (an Azure Durable Functions app) invokes the Copilot Studio agent
-over Direct Line → on the W365A pool the AI opens `claims.exe`, drives the claim wizard by
-sight, reads the new **claim ID** off the screen → the result returns to the CCaaS desktop.
-
-> **Two AI backends.** The default above is **Microsoft Copilot Studio** (MCS). You can
-> instead (or additionally) use **Azure AI Foundry + Windows 365 for Agents** via
-> [`samples/foundry-w365a-runner`](./samples/foundry-w365a-runner). Pick at build time with
-> `Build-DemoFromScratch.ps1 -AgentBackend mcs|foundry|both` (or set `agentBackend` in the
-> config). `both` bakes both endpoints into the SPA so the desktop's backend toggle switches
-> between them live. Both speak the **same** handoff contract, so the CCaaS desktop and
-> orchestrator are identical either way. See
-> [`docs/config-reference.md`](docs/config-reference.md#agentbackend--choose-the-ai-backend-optional-defaults-to-mcs).
-
-> **In-app near-live view + audit trail (Option A).** When the agent uses *Authenticate with
-> Microsoft* (required for the Copilot Studio Activity / Session-replay audit trail), the
-> browser-direct Direct Line stream no longer works. The supported way to keep an in-app view of
-> the Computer Use run **and** the audit trail is to start the run from an **autonomous Dataverse
-> trigger** and poll the run's screenshots for a near-live view. See
-> [`docs/option-a-inapp-near-live.md`](docs/option-a-inapp-near-live.md).
-
----
-
-## Prerequisites
-
-- An **M365 E5** tenant (Entra-joined; no on-prem AD required) and an **Azure
-  subscription** where you have **Contributor** — on the subscription, or on a
-  pre-created resource group matching the config (the build creates the resource group if
-  it doesn't already exist).
-- **Two Cloud PCs** (you create these — the build never provisions Cloud PCs or licences):
-  - the **human agent workstation** (Windows 365 Enterprise / Flex / Frontline), and
-  - the **W365A pool** Cloud PC. Pool how-to: **[`docs/w365a-pool.md`](docs/w365a-pool.md)**.
-- **Microsoft Copilot Studio** access with the **Computer Use** capability enabled in your
-  Power Platform environment.
-- The agent must **require authentication** via **Authenticate manually** (Settings → Security →
-  Authentication → *Authenticate manually* — a custom Entra app registration; **not** *No
-  authentication* and **not** *Authenticate with Microsoft*, which disconnects the Direct Line channel
-  the orchestrator uses). **Computer Use is disabled for unauthenticated agents** — leaving it open
-  makes the handoff fail before any Cloud PC run (Test pane: *"CUA is disabled for unauthenticated
-  agents"*).
-- A **Windows 365 for Agents pay-as-you-go billing policy** attached to that environment (issue
-  #77) — **separate from** Copilot Studio entitlement and **not** covered by M365/Copilot
-  licensing. It's what lets the pool provision **real Cloud PCs** (a provisioning policy requires an
-  active billing plan); without it you can't get a machine-backed pool. When attaching it, **set
-  always-available = 1 Cloud PC (~$5/mo)** in the Intune provisioning policy so there's no cold start.
-  (Note: a dead handoff with the pool showing *0 runs* is usually the **agent-authentication** issue
-  above, not billing.) See [`docs/licensing-and-entitlement.md`](docs/licensing-and-entitlement.md#also-required-a-windows-365-for-agents-pool-billing-policy-separate-meter-issue-77).
-- **Microsoft Intune** access (delivers the legacy app and the CCaaS Edge web app).
-- Local tooling: **Azure CLI** (`az`), **Node.js 20+** (`node`, `npm`), **PowerShell 7**
-  (`pwsh`), and **Azure Functions Core Tools v4** (`func`,
-  `npm i -g azure-functions-core-tools@4`). The build checks these and fails fast with the
-  exact install command if one is missing.
-
-### One-time tenant setup (once per tenant)
-
-> **Shortcut:** several steps below and in the linked guides are portal/admin toggles. If you use an
-> AI desktop agent that can drive your browser/shell as you (e.g. Microsoft Scout), you can delegate
-> most of them with your review — see [`docs/setup-with-an-ai-agent.md`](docs/setup-with-an-ai-agent.md)
-> for a ready-to-paste prompt.
-
-1. Run **[`scripts/Enable-W365aPrereqs.ps1`](scripts/Enable-W365aPrereqs.ps1)** as a
-   **Global / Intune Admin**:
-   ```powershell
-   pwsh -File .\scripts\Enable-W365aPrereqs.ps1 -TenantId <tenant-id> -CreateDynamicGroup
-   ```
-   Enables the Entra prerequisites the W365A pool needs. `-CreateDynamicGroup` also hides the
-   Remote Desktop consent prompt so Computer Use runs don't fail.
-2. Two portal toggles: enable **Computer Use** in your Power Platform environment, and in
-   Intune allow **Windows (MDM)** corporate enrollment.
-
-> Sign in interactively when prompted (`az login`, plus the scripts' device-code / interactive
-> sign-in). Only for **unattended / app-only** runs do you first create an app registration with
-> [`scripts/Bootstrap-DemoServicePrincipal.ps1`](scripts/Bootstrap-DemoServicePrincipal.ps1)
-> (Global Admin) and set `appRegistration` in the config — otherwise it isn't needed.
-
----
-
-## Deploy it with an AI agent (Copilot)
-
-**The fastest way to stand this up.** Several steps are portal/admin actions the scripts deliberately
-don't automate (Power Platform toggles, Copilot Studio settings, Intune checks, Entra app
-registrations). If you use an **AI desktop agent that can drive your browser and shell under your own
-signed-in session** — for example **Microsoft Scout** — you can hand most of these off and just review
-the result, instead of clicking through every blade yourself.
-
-> **Why it's safe.** The agent acts **as you**, in **your** already-signed-in browser and shell — it
-> never gets your password and has no standing admin credential of its own. You stay in the loop: it
-> shows you what it changed (with screenshots) and you do the final review. Think of it as a very fast
-> pair of hands, not an unattended service account.
-
-**How to use it:**
-
-1. Open this repo's folder in your AI desktop agent.
-2. Paste the ready-made prompt from **[`docs/setup-with-an-ai-agent.md`](docs/setup-with-an-ai-agent.md)**
-   (fill in your environment + agent names).
-3. The agent runs the build scripts and walks the portal toggles **with you**, pausing for your
-   review before each save.
-
-What an agent can and can't do (full table + the exact prompt) is in
-**[`docs/setup-with-an-ai-agent.md`](docs/setup-with-an-ai-agent.md)**. Money-spending or
-broad-blast-radius actions (billing, going public) stay explicit human decisions.
-
-Prefer to do it by hand? Continue with **[Deploy it yourself](#deploy-the-demo)** below.
-
----
-
-## Deploy the demo
-
-> Prefer to delegate the clicking? See **[Deploy it with an AI agent](#deploy-it-with-an-ai-agent-copilot)** above.
-
-One script (**[`scripts/Build-DemoFromScratch.ps1`](scripts/Build-DemoFromScratch.ps1)**) and
-one config file stand up everything else — in any tenant, subscription, or region. Nothing in
-the scripts is hardcoded.
-
-**It builds:** the handoff orchestrator (Durable Functions backend — resource group, Storage,
-Function app with a managed identity, Key Vault holding the secret + callback key); the central
-host for the CCaaS web app (**Azure Static Web Apps, Free tier — $0**, with the orchestrator
-URL baked into the desktop build); the Entra targeting groups; the legacy Win32 claims app; and
-the CCaaS app as an Edge force-installed web app (PWA).
-
-### 1. Create the config file
-
-```powershell
-Copy-Item .\scripts\demo-config.sample.json .\scripts\demo-config.local.json
+```text
+Presenter in Zava (Microsoft Entra ID sign-in)
+  -> handoff service (Azure Functions, managed identity)
+       MCS:     /api/cua-run writes a Dataverse row -> Power Automate trigger flow
+                -> Copilot Studio agent -> Computer Use on a Copilot Studio Cloud PC pool
+       Foundry: /api/foundry-claims/* checks the user's token -> Foundry hosted agent
+                -> Agent 365 SDK discovers the Windows 365 for Agents Computer Use MCP server
+                -> Cloud PC from the agent's Windows 365 for Agents pool
+  -> Legacy Claims Workstation (delivered to both pools by Intune)
+  -> observed claim number back in the same Zava interaction -> Cloud PC released
 ```
 
-Edit `demo-config.local.json` (it is git-ignored — never commit it). **For your first build,
-set just 3 fields:** `azure.subscriptionId`, `azure.tenantId`, `azure.location`. Leave
-everything else as-is — blanks are auto-filled. Field-by-field help:
-**[`docs/config-reference.md`](docs/config-reference.md)**.
+| Part | Folder |
+| --- | --- |
+| Zava CCaaS Agent Desktop (React/Vite on Azure Static Web Apps) | `apps\ccaas-agent-desktop` |
+| Handoff service (Azure Functions) | `apps\handoff-orchestrator` |
+| Legacy Claims Workstation and its Intune packages | `apps\legacy-claims-workstation`, `deploy\intune-packages` |
+| Foundry hosted agent (Python) and its deploy scripts | `samples\foundry-hosted-claims`, `deploy\foundry` |
+| Copilot Studio agent configuration and trigger flow | `docs\mcs-computer-use-instructions.md`, `deploy\mcs`, `scripts\mcs` |
+| Installation and helper scripts | `docs\install`, `scripts` |
 
-> Leave `handoffOrchestrator.directLineSecret` **blank** — you get it in step 3.
+In the Foundry path the MCP server is called from the agent's own code; nothing is added as a
+tool in the Foundry portal designer. Details:
+[`samples\foundry-hosted-claims\README.md`](samples/foundry-hosted-claims/README.md).
 
-### 2. Run the build
+## Install it in your own tenant
 
-```powershell
-# Preview every change without touching anything:
-pwsh -File .\scripts\Build-DemoFromScratch.ps1 -WhatIf
-# Then build for real (add -DeviceCode on a headless admin box):
-pwsh -File .\scripts\Build-DemoFromScratch.ps1
-```
+Follow **one ordered guide**: [`docs\install\README.md`](docs/install/README.md). Everything it
+needs is in this repository or is a public Microsoft prerequisite (tenant, licences, Azure
+subscription, Copilot Studio, Windows 365 for Agents billing, Intune).
 
-The website and infrastructure deploy. The AI backend is **skipped** because the secret is
-blank — that's expected; you add it next.
+- You **build the Foundry agent image yourself** from this repository into your own Azure
+  Container Registry; no prebuilt image is published and no access to anyone else's registry
+  is needed.
+- The Claims app is committed as a ready Intune package; no compiler is needed.
+- Every tenant value is a placeholder in the committed files. Your own values go in git-ignored
+  `*.local.json` files.
+- Scripts preview first (`-WhatIf`, `-Plan` or plan mode). Commands that create resources,
+  grant permissions or turn the agent on are run deliberately by the environment owner.
 
-### 3. Build and publish the Copilot Studio agent
+After installation, the [presenting guide](docs/install/presenting.md) is all a presenter
+needs; it needs no checkout or developer tools.
 
-> **Licensing gate — set this up first.** Publishing the agent to the **Direct Line / Web / Mobile
-> app** channel (which the orchestrator needs) is **premium** Copilot Studio usage. Without a
-> durable entitlement, Copilot Studio shows a *"Start a 60-days free trial"* prompt — and a trial
-> is **not durable** for a reusable demo. Recommended: **pay-as-you-go billing** linked to an Azure
-> subscription (cents per run). See [`docs/licensing-and-entitlement.md`](docs/licensing-and-entitlement.md).
->
-> **Two meters, not one.** The Copilot Studio entitlement only unblocks the **channel**. The
-> **Computer Use Cloud PC pool** that drives `claims.exe` needs its **own** Windows 365 for Agents
-> PAYG **billing policy** on the environment (issue #77) — it's what lets the pool provision **real
-> Cloud PCs** (no billing plan → no machine-backed pool). Attach both; set **always-available = 1
-> (~$5/mo)** in the Intune provisioning policy. (A dead handoff with *0 runs* is usually the
-> **agent-authentication** gate, not billing.) See [`docs/licensing-and-entitlement.md` → pool billing policy](docs/licensing-and-entitlement.md#also-required-a-windows-365-for-agents-pool-billing-policy-separate-meter-issue-77).
+## What has been demonstrated, and what has not
 
-> **Preflight (do this first):** Copilot Studio needs a Power Platform environment **with a Dataverse
-> database**. If the portal shows only a spinning **"loading donut"** (and never the app), your
-> environment is missing Dataverse — the **default** environment (`databaseType: None`) does **not**
-> work. Verify/fix this before continuing:
-> [`docs/build-the-agent.md` → Preflight](docs/build-the-agent.md#preflight-make-sure-copilot-studio-actually-loads-dataverse).
+- **Demonstrated** in the author's reference environment on 7-8 October 2026: complete Zava
+  transfers on both backends filed synthetic claims and returned the observed claim number to
+  the same interaction; the Foundry path showed the live Cloud PC session in Zava. Timings are
+  in the presenting guide.
+- **Not demonstrated:** a fresh installation in a different tenant by following the guide.
+  The guide is written from the scripts and the reference setup, and each step has a read-only
+  check, but expect to adapt names, regions and quotas.
+- **Install defaults are safe:** a new Foundry agent version has its execution gates off and
+  refuses desktop work until the owner turns them on after identity setup.
 
-Follow **[`docs/build-the-agent.md`](docs/build-the-agent.md)**: create the agent → turn on
-Generative Orchestration (**before** adding Computer Use — the tool requires it) → **require
-authentication** (Settings → Security → Authentication → *Authenticate manually*) → add the
-**Computer Use** tool pointed at your W365A pool → publish.
-**Publishing generates the Direct Line secret** — copy it.
+## Known limitations
 
-> **Handoff connects but times out at `ready` with the pool showing 0 runs ever?** The agent is set
-> to **No authentication** — Computer Use is **disabled for unauthenticated agents** (Test pane:
-> *"CUA is disabled for unauthenticated agents. Please change your agent security settings."*). Fix:
-> Settings → Security → Authentication → **Authenticate manually** (a custom Entra app registration —
-> **not** *Authenticate with Microsoft*, which disconnects Direct Line) → Save → Publish, then re-copy
-> the Direct Line secret if it rotated. See
-> [`docs/build-the-agent.md` → step 2](docs/build-the-agent.md#2-turn-on-generative-orchestration) and
-> [`docs/w365a-pool.md` → pool healthy but Computer Use never runs](docs/w365a-pool.md#if-the-pool-is-healthy-but-computer-use-never-runs-handoff-times-out-at-ready).
+- Expect waits. A Cloud PC is reset after each run; in the reference one-PC Foundry pool it was
+  free again after about 15-17 minutes. MCS runs took about 4-13 minutes, mostly depending on
+  whether the pool handed over a newly prepared Cloud PC.
+- The optional "Cloud PC available" check in Zava reads a Microsoft Graph **beta** field, and
+  its permission (`CloudPC.Read.All`) is tenant-wide read access to Cloud PC data.
+- The MCS Computer Use tool receives the handoff only through its tool instructions
+  (`{System.Activity.Text}`); see [`docs\mcs-computer-use-instructions.md`](docs/mcs-computer-use-instructions.md).
+- Use synthetic data and a dedicated low-privilege demo pool. The agent's Claims-only
+  instructions are not an operating-system security boundary.
+- Windows 365 for Agents, Agent 365 tooling and Foundry hosted agents are new services; names,
+  APIs and regions can change. Check the linked Microsoft documentation.
 
-> **Adding the Computer Use tool errors with `connectionReference is not defined`, or the machine
-> drop-down has no `Cloud PC pool` option?** These are environment/provisioning gates (generative
-> orchestration off, a brand-new environment still provisioning, DLP, or cross-geo).
-> See [`docs/build-the-agent.md` → step 3](docs/build-the-agent.md#3-add-the-computer-use-tool-and-point-it-at-your-pool)
-> and [`docs/w365a-pool.md` troubleshooting](docs/w365a-pool.md#if-the-machine-drop-down-has-no-cloud-pc-pool-option).
+## Experimental and retired material
 
-### 4. Add the secret and re-run the build
+- **Experimental:** `samples\mcs-new-harness` (authentication-only harness). Not part of the
+  install.
+- **Retired:** the Direct Line handoff and the Durable Functions orchestration. Their code is
+  still in the two apps for compatibility, but the install guide does not configure them; do not
+  set `HANDOFF_*`, `ENGINE_*` or `DIRECTLINE_*` settings for a new install. The local
+  orchestrator and the local Foundry runner (`samples\foundry-w365a-runner`) were removed; do not
+  follow older instructions that mention them.
+- **Historical documents:** `docs\CCaaS-Demo-Setup-Guide.docx` (May 2026) describes the retired
+  local-orchestrator design. `docs\Zava-CCaaS-Demo.pptx` is the June 2026 overview deck. Use
+  this README and `docs\install` for the current design.
 
-Paste the secret into `handoffOrchestrator.directLineSecret`, then run the build again. This
-time the AI backend deploys and prints an **orchestrator callback URL** and **callback key**.
+## Third-party components
 
-### 5. Finish the agent
+Nothing third-party is bundled in this repository. Dependencies are downloaded from their
+official sources when you build or run: npm packages (`package.json`), Python packages
+(`samples\foundry-hosted-claims\pyproject.toml`, pinned), Microsoft's Win32 Content Prep Tool
+(downloaded by the packaging scripts only if you rebuild an Intune package) and Microsoft's
+Windows 365 screen-share SDK (loaded by the browser from Microsoft's URL). Each is used under its
+own licence and terms. This repository's own code is under the [MIT licence](LICENSE).
 
-Paste the callback URL + key into the agent's **result-callback flow**
-([`docs/handoff-runbook.md`](docs/handoff-runbook.md) §2c) and **re-publish**.
+## Safety rules
 
-### 6. Onboard the two machines
-
-Add them to the Entra groups the build created (in the portal, or seed them in the config):
-add the **pool** Cloud PC device to the agent-pool device group (`agentPool.pilotCloudPcName`)
-so the claims app installs; add the **human agent** user to the workstation user group
-(`agentWorkstation.agentUserName`) so the CCaaS desktop icon (Edge web app) follows them.
-
-> [!NOTE]
-> The demo runs on the **Windows 365 for Agents Cloud PC pool**. `claims.exe` is delivered
-> to that pool via **Intune as a required Win32 app**. Copilot Studio Cloud PC pools are
-> **Entra-joined and Intune-enrolled** per Microsoft GA documentation, so the app is
-> pre-installed before the Computer Use session starts and the agent simply launches it.
-> No self-provisioning, SWA binary hosting, or runtime download is needed. See
-> [`docs/w365a-pool.md`](docs/w365a-pool.md#getting-claimsexe-onto-the-pool).
-
-> **Static Web Apps region:** SWA managed Functions run only in a limited set of regions
-> (`westus2`, `centralus`, `eastus2`, `westeurope`, `eastasia`) — not `australiaeast`. Leave
-> `staticWebApp.location` **blank** and the build auto-picks the nearest supported region and
-> tells you which. Static content is served globally regardless.
-
----
-
-## Test, reset, and tear down
-
-- **Test:** open the CCaaS desktop on the human workstation, take the sample call, click
-  **Hand off to AI**, and watch the agent file the claim on the W365A pool. The desktop shows
-  **"Claim filed"** with the claim ID.
-- **Show it's auditable:** after a run, open the agent's **Activity** in Copilot Studio and replay
-  the screenshots + reasoning. Set this up once via
-  [`docs/cua-auditability.md`](docs/cua-auditability.md); demo the backend (Intune, Copilot Studio,
-  Agent 365) via [`docs/demo-backend-walkthrough.md`](docs/demo-backend-walkthrough.md).
-- **Reset between demos:** refresh the agent's connection (Copilot Studio → Settings →
-  Connections) and clear any test claims.
-- **Tear down:**
-  ```powershell
-  pwsh -File .\scripts\Remove-DemoEnvironment.ps1 -TenantId <tenant>            # preview
-  pwsh -File .\scripts\Remove-DemoEnvironment.ps1 -TenantId <tenant> -Execute   # apply
-  ```
-  Removes the Intune apps + Edge web-app policy, the groups, the scope tag, the handoff orchestrator
-  (add `-PurgeKeyVault` to also purge the soft-deleted Key Vault), and the Static Web App (add
-  `-RemoveResourceGroup` to delete the resource group too). The Cloud PCs and user accounts are
-  never deleted.
-
----
-
-## Repository structure
-
-| Folder | What it is |
-|---|---|
-| [`apps/ccaas-agent-desktop/`](./apps/ccaas-agent-desktop/) | **CCaaS Agent Desktop** — the human agent's web app (React + Vite + TypeScript) |
-| [`apps/legacy-claims-workstation/`](./apps/legacy-claims-workstation/) | **Legacy Claims Workstation** — the Win32 `claims.exe` the AI drives |
-| [`apps/handoff-orchestrator/`](./apps/handoff-orchestrator/) | **Handoff orchestrator** — the Azure Durable Functions backend |
-| [`samples/foundry-w365a-runner/`](./samples/foundry-w365a-runner/) | **Foundry + Windows 365 for Agents runner** — the alternative AI backend (drives `claims.exe` via the Foundry Computer Use loop) |
-| [`scripts/`](./scripts/) | Deployment + teardown scripts |
-| [`docs/`](./docs/) | Deployment guides ([build-the-agent](docs/build-the-agent.md), [config-reference](docs/config-reference.md), [w365a-pool](docs/w365a-pool.md), [handoff-runbook](docs/handoff-runbook.md)), demo guides ([demo-flow](docs/demo-flow.md), [demo-backend-walkthrough](docs/demo-backend-walkthrough.md)), and [cua-auditability](docs/cua-auditability.md) |
-
-> **Status: pre-release.** The apps are being built from spec; downloadable release artifacts
-> will appear on the [releases page](https://github.com/RoelDU/w365-for-agents-cua-lab/releases) once v1.0
-> ships. To build them yourself today, see [`docs/BUILD.md`](./docs/BUILD.md).
-
----
-
-## License
-
-[MIT](./LICENSE)
-
-## A note on the fictional brand
-
-The **Zava Mutual** insurance carrier and **Zava Contact Center** CCaaS provider are fictional.
-Zava is a Microsoft-standard fictional brand. All customers, policies, claims, and transcripts
-in the seed data are fabricated — no real personal, financial, or insurance data is included.
-
-## Trademarks
-
-This project may contain trademarks or logos for projects, products, or services. Authorized
-use of Microsoft trademarks or logos is subject to and must follow
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks).
-Use in modified versions must not cause confusion or imply Microsoft sponsorship. Third-party
-trademarks or logos are subject to those third parties' policies.
+- Do not commit tenant IDs, secrets, tokens, keys, connection strings, or filled-in `*.local.json` files.
+- Do not push from this repository unless a human explicitly asks you to.
+- Any command that creates cloud resources, grants roles, or deploys a hosted agent must be run
+  deliberately by the environment owner.

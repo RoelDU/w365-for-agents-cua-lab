@@ -55,11 +55,22 @@ export function App() {
     // URL carries the auth response; finish it, set the real identity, and land
     // on the workspace. Always attempted — Entra is the sole sign-in path.
     import("@/lib/msalLogin")
-      .then(async ({ completeRedirectSignIn }) => {
+      .then(async ({ completeRedirectSignIn, getSignedInAccount, takeRedirectOutcome, acquireHandoffAccessToken }) => {
         const identity = await completeRedirectSignIn();
+        const redirect = takeRedirectOutcome();
+        const { finishReconnect } = await import("@/lib/handoffRecovery");
         if (identity) {
           setAgent(identity);
+          // Back from a sign-in reconnect: verify the account, restore the same call,
+          // then confirm the relay token (reported, not hidden, if anything fails).
+          const account = await getSignedInAccount();
+          const finished = finishReconnect({ account, redirect, checkToken: acquireHandoffAccessToken });
           navigate("/workspace", { replace: true });
+          await finished;
+        } else {
+          // No account came back: a failed redirect is still reported (on the login
+          // screen) and a saved call is kept for its owner, never restored or dropped.
+          await finishReconnect({ account: null, redirect, checkToken: acquireHandoffAccessToken });
         }
       })
       .catch(() => {

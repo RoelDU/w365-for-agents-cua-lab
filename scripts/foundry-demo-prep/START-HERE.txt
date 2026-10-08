@@ -1,0 +1,199 @@
+ZAVA -> FOUNDRY CLAIMS DEMO: PREPARATION PACKAGE
+================================================
+
+Version: see PACKAGE-INFO.txt. Read this file first.
+
+
+1. WHO NEEDS WHAT
+-----------------
+
+PRESENTER (shows the demo)
+  You do NOT need this package, a code repository or any administrator access.
+  You need only:
+    - the Zava web address for your test environment,
+    - the presenting account (it must be allowed to sign in to Zava),
+    - the browser check in section 6, done shortly before you present.
+
+ENVIRONMENT OPERATOR (looks after the test environment)
+  Runs the preparation tool in this package about 30 minutes before the demo,
+  and if possible again 2-5 minutes before. The tool needs the sign-ins and
+  permissions listed in section 3.
+
+Setting up the environment itself (Zava, the relay, the Foundry agent and the
+Windows 365 agent pool) is a separate one-time job for an environment
+administrator. This package only checks that setup; it does not create or
+change it.
+
+
+2. WHAT THE TOOL DOES, AND WHAT IT DOES NOT
+-------------------------------------------
+
+It does:
+  - check that the Zava page opens;
+  - wake the relay (a pay-per-use service that falls asleep after a few idle
+    minutes) and confirm that Foundry transfers are enabled;
+  - read the active Foundry agent version and confirm its Claims switches are on;
+  - read the Windows 365 agent pool and say whether a Cloud PC is free now.
+    With -WaitForCloudPcMinutes it keeps checking every minute while a Cloud PC
+    is resetting.
+
+It never: starts a transfer, files a claim, takes or holds a Cloud PC, calls the
+Foundry agent, or changes any setting.
+
+It does not remove every start-up delay. It does not reserve a Cloud PC in
+advance. Each transfer still starts its own Foundry sandbox and Windows 365 still
+hands over the Cloud PC for that transfer (about half a minute in the reference
+environment). After a transfer ends, a one-PC pool took about 15-17 minutes to
+become usable again, so a rehearsal close to the demo can leave nothing free.
+
+
+3. PREREQUISITES (OPERATOR)
+---------------------------
+
+  - Windows with Windows PowerShell 5.1 (built into Windows 10/11) or PowerShell 7.
+  - Azure CLI, for the Foundry and Cloud PC checks only:
+        winget install -e --id Microsoft.AzureCLI
+    then open a new PowerShell window.
+  - Two Azure CLI sign-ins, kept in profile folders named in the configuration:
+      a) Foundry check: a person's account with the "Foundry User" role on the
+         Foundry project.
+      b) Cloud PC pool check: an app (service principal) sign-in with the
+         Microsoft Graph application permission CloudPC.Read.All. An ordinary
+         person's Azure CLI sign-in is refused here, even for a Global
+         Administrator, because Azure CLI's own Graph sign-in does not include
+         Cloud PC permissions.
+  - Network access to the Zava, relay, Foundry and Microsoft Graph addresses.
+
+  NOT needed: Git, Node, Python, the source repository, building anything, or
+  administrator rights on the computer.
+
+  Without the Azure CLI or sign-ins you can still run
+      .\Prepare-FoundryDemo.cmd -SkipAzureChecks
+  which checks only the Zava page and wakes the relay.
+
+
+4. ONE-TIME SETUP (OPERATOR)
+----------------------------
+
+  In PowerShell, in the folder where you saved the ZIP file:
+
+    Unblock-File .\zava-foundry-demo-prep-1.0.0.zip
+    Expand-Archive .\zava-foundry-demo-prep-1.0.0.zip -DestinationPath "$HOME\zava-foundry-demo-prep"
+    Set-Location "$HOME\zava-foundry-demo-prep"
+
+  (Use the actual file name if the version differs. Any folder works; the tool
+  only looks in its own folder.)
+
+  Configuration. Either copy in the filled-in foundry-demo.config.json your
+  environment administrator gave you, or make one from the template:
+
+    Copy-Item .\foundry-demo.config.template.json .\foundry-demo.config.json
+    notepad .\foundry-demo.config.json
+
+  Settings:
+    zavaUrl                 Zava web address (https://...azurestaticapps.net)
+    relayUrl                relay address ending in /api/foundry-claims
+    foundryAgentUrl         Foundry agent management address (ends ?api-version=v1)
+    cloudPcPoolId           Windows 365 agent pool ID
+    tenantId                Microsoft Entra tenant ID (only used in sign-in hints)
+    expectedFoundryVersion  optional; warns if a different agent version is active
+    foundryAzureConfigDir   Azure CLI profile folder for the Foundry sign-in
+    poolAzureConfigDir      Azure CLI profile folder for the pool sign-in
+  An empty profile folder means the computer's default Azure CLI sign-in.
+  Folders may use %USERPROFILE%; a relative folder is relative to the
+  configuration file. Never put passwords, secrets or tokens in this file.
+
+  Sign in once per profile folder (examples; the tool prints the exact command
+  for your configuration when a sign-in is missing):
+
+    $env:AZURE_CONFIG_DIR = "$HOME\.azure-zava-foundry-demo"
+    az login --allow-no-subscriptions --tenant <tenant-id>
+
+    Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue
+    az login --service-principal --username <app-id> --certificate <path-to-pem> --tenant <tenant-id>
+
+  Then test:
+
+    .\Prepare-FoundryDemo.cmd
+
+  Prepare-FoundryDemo.cmd can also be double-clicked. It uses PowerShell 7 when
+  installed, otherwise Windows PowerShell. If your organisation blocks it, run
+  .\Prepare-FoundryDemo.ps1 directly instead (after Unblock-File as above).
+  To keep the configuration elsewhere, add -ConfigPath <file> or set the
+  FOUNDRY_DEMO_CONFIG environment variable.
+
+
+5. ON THE DAY
+-------------
+
+  Earlier that day, if at all     A full rehearsal transfer must finish at least
+                                  25 minutes before presenting (the pool needs
+                                  about 15-17 minutes to reset).
+
+  About 30 minutes before         OPERATOR:  .\Prepare-FoundryDemo.cmd -WaitForCloudPcMinutes 20
+                                  Finds problems while there is time. Waits up to
+                                  20 minutes if the Cloud PC is still resetting.
+
+  2-5 minutes before              OPERATOR:  .\Prepare-FoundryDemo.cmd   (about 15-20 seconds)
+                                  Wakes the relay again and confirms the Cloud PC
+                                  is still free.
+                                  PRESENTER: the browser check (section 6). It
+                                  also wakes the relay.
+
+  Results:
+    OVERALL: READY            (exit code 0)  all checks green. Present within a few minutes.
+    OVERALL: STILL PREPARING  (exit code 1)  the Cloud PC is still resetting. Rerun shortly.
+    OVERALL: ACTION NEEDED    (exit code 2)  each red line says what to fix.
+
+
+6. BROWSER CHECK (PRESENTER, 2-5 MINUTES BEFORE)
+-----------------------------------------------
+
+  In the normal (not private) browser window you will present from:
+    1. Open <Zava address>/workspace, signed in as the presenting account.
+    2. Simulate Inbound Call -> Answer -> Transfer.
+       "Claims Automation Agent (Foundry)" must be enabled with no message under
+       it (no "Reconnect Microsoft sign-in", "could not be used" or
+       "may still be running").
+    3. Close the transfer list WITHOUT choosing the AI agent, then Reset demo.
+       Do not submit a warm-up claim: it would use the only Cloud PC.
+
+  Sign-in: keep the browser's existing Microsoft sign-in; you do not need to
+  sign in again every day. Zava's browser refresh token lasts 24 hours, but
+  after that Zava renews silently through the browser's existing Microsoft
+  sign-in session while that session is still valid. Only if Zava shows
+  "Reconnect Microsoft sign-in" do you need to sign in; do it before taking the
+  call (the call is kept).
+
+
+7. WHAT TO EXPECT LIVE (REFERENCE RUN, 7 OCTOBER 2026)
+-----------------------------------------------------
+
+  The claim number appeared in Zava 92.4 seconds after Confirm, or 104.7 seconds
+  from opening the confirmation. The 104.7 seconds includes 12.4 seconds between
+  opening the confirmation and pressing Confirm, during which Zava was already
+  preparing the Foundry request. Review the confirmation normally; there is no
+  need to pause on purpose. These are one run's timings, not a guarantee.
+
+  Along the way: Windows 365 hands over the Cloud PC (about half a minute), the
+  live screen appears a few seconds later, and the agent works through its
+  steps with a short explanation for each.
+
+
+8. IF THE DEMO STARTS LATE OR SOMETHING IS NOT READY
+----------------------------------------------------
+
+  Starting late:    rerun .\Prepare-FoundryDemo.cmd and the browser check just
+                    before presenting; the relay may have gone back to sleep.
+  STILL PREPARING:  the Cloud PC is resetting. Wait (up to about 20 minutes) or
+                    present from the backup video. Do not start a "test"
+                    transfer; it uses the only Cloud PC.
+  ACTION NEEDED:    fix what the red line names (configuration, sign-in or
+                    permission), or ask the environment administrator.
+  "Reconnect Microsoft sign-in" in Zava: do it before the call.
+  A Cloud PC "in use" with no transfer running: open that transfer in Zava and
+                    use its status/release. An unreleased session is reclaimed
+                    only after 30 idle minutes.
+  During the demo:  if the live screen does not appear, use "Watch live screen".
+                    If a transfer's outcome is unknown, check its status in the
+                    same interaction before starting another.

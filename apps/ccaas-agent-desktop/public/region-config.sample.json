@@ -1,16 +1,19 @@
 {
-  "_README": "TEMPLATE. Copy to region-config.json (gitignored) and fill with your own Copilot Studio agent endpoints. Served at runtime so the CUA region can change with no rebuild. Resolution: build-time VITE_DIRECTLINE_TOKEN_URL fallback -> /region-config.json -> ?region=<id>. Get directLineTokenUrl from Copilot Studio > Channels > Web app (the botsbyschema/<schema> segment is environment-specific). See docs/region-config.md.",
+  "_README": "TEMPLATE. Copy to region-config.json (gitignored) and fill with your own handoff service URLs. Served at runtime so the active region can change with no rebuild. Current install uses cuaRunBaseUrl for MCS progress and orchestratorUrl for the Foundry relay. directLineTokenUrl is retained for in-app stream compatibility when used.",
   "activeRegion": "primary",
   "regions": [
     {
       "id": "primary",
       "label": "Primary region",
-      "directLineTokenUrl": "https://YOUR-ENV-HOST.environment.api.powerplatform.com/powervirtualagents/botsbyschema/YOUR_SCHEMA/directline/token?api-version=2022-03-01-preview",
-      "orchestratorUrl": "https://YOUR-HANDOFF-FUNC.azurewebsites.net/api"
+      "cuaRunBaseUrl": "https://YOUR-HANDOFF-FUNCTION.azurewebsites.net/api",
+      "orchestratorUrl": "https://YOUR-HANDOFF-FUNCTION.azurewebsites.net/api",
+      "directLineTokenUrl": "https://YOUR-ENV-HOST.environment.api.powerplatform.com/powervirtualagents/botsbyschema/YOUR_SCHEMA/directline/token?api-version=2022-03-01-preview"
     },
     {
       "id": "secondary",
       "label": "Secondary region",
+      "cuaRunBaseUrl": "https://YOUR-SECOND-HANDOFF-FUNCTION.azurewebsites.net/api",
+      "orchestratorUrl": "https://YOUR-SECOND-HANDOFF-FUNCTION.azurewebsites.net/api",
       "directLineTokenUrl": "https://YOUR-OTHER-ENV-HOST.environment.api.powerplatform.com/powervirtualagents/botsbyschema/YOUR_SCHEMA/directline/token?api-version=2022-03-01-preview"
     }
   ]

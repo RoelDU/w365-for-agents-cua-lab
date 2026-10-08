@@ -9,9 +9,9 @@
 > base URL differs.
 
 This app talks to the local orchestrator (at
-`../../samples/local-orchestrator/`, or a deployed equivalent - e.g. the SWA
+the supported handoff service, for example the Azure Functions app
 `/api`) using a tiny HTTP + (optional) SSE protocol. All payloads conform to the
-shared JSON Schemas at `../../schemas/`. The orchestrator is the **seam** between
+shared JSON Schemas at `../../../schemas/`. The orchestrator is the **seam** between
 the CCaaS Agent Desktop and the W365A-hosted legacy claims workstation;
 this app is intentionally unaware of Foundry, Computer Use, or Agent365.
 
@@ -32,7 +32,7 @@ purposes.
 
 ### `POST /handoff`
 
-Body: a [`CallContext`](../../schemas/call-context.schema.json) JSON payload.
+Body: a [`CallContext`](../../../schemas/call-context.schema.json) JSON payload.
 
 ```json
 {
@@ -109,9 +109,9 @@ same status payloads as JSON `data:` frames. This app auto-detects support:
 
 | Direction | Endpoint | Schema |
 | --- | --- | --- |
-| App → Orchestrator | `POST /handoff` | [`call-context.schema.json`](../../schemas/call-context.schema.json) |
-| Orchestrator → Legacy app (file) | (out-of-band) | [`prefill.schema.json`](../../schemas/prefill.schema.json) |
-| Legacy app → Orchestrator | (out-of-band) | [`ready.schema.json`](../../schemas/ready.schema.json), [`result.schema.json`](../../schemas/result.schema.json), [`error.schema.json`](../../schemas/error.schema.json) |
+| App → Orchestrator | `POST /handoff` | [`call-context.schema.json`](../../../schemas/call-context.schema.json) |
+| Orchestrator → Legacy app (file) | (out-of-band) | [`prefill.schema.json`](../../../schemas/prefill.schema.json) |
+| Legacy app → Orchestrator | (out-of-band) | [`ready.schema.json`](../../../schemas/ready.schema.json), [`result.schema.json`](../../../schemas/result.schema.json), [`error.schema.json`](../../../schemas/error.schema.json) |
 | Orchestrator → App | `GET /handoff/:id/status` (+ SSE) | union of the above response fields |
 
 ## File-mode fallback
@@ -134,7 +134,7 @@ or enter the claim ID manually.
 
 ```powershell
 # In another terminal, start the local orchestrator (if you have one):
-#   cd ..\..\samples\local-orchestrator
+#   use the deployed handoff service base URL
 #   npm run dev
 #
 # Or, just run the file-mode flow with the orchestrator URL pointed at

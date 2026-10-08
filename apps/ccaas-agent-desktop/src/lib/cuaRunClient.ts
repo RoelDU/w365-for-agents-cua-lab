@@ -12,29 +12,33 @@
  *      row to a Dataverse table whose "row created" event is an AUTONOMOUS
  *      TRIGGER on the agent. Autonomous-trigger runs DO appear in Activity, so
  *      the audit trail (screenshots + reasoning Session replay) is preserved.
- *   2. The orchestrator polls the Computer Use Dataverse logs
- *      (flowsession / flowsessionbinary / flowlog) and exposes them as a simple
- *      progress feed. The app POLLS that feed (~every 2.5s) and renders the
- *      screenshots + reasoning as each action completes — a NEAR-LIVE view
- *      (a few seconds behind real time), not a real-time socket stream.
+ *   2. The orchestrator reads the Computer Use logs (flowsession / flowlog /
+ *      flowsessionbinary) and exposes each logged action as a progress step: the
+ *      agent's own explanation (or null when none was logged), the action, the
+ *      application and the exact screenshot. The app POLLS that feed (~every
+ *      2.5s) — a NEAR-LIVE view (a few seconds behind), not a socket stream.
  *
- * This client emits the SAME update contract as directLineClient.ts
- * (DirectLineUpdate) so the AI Agent Status panel rendering is reused unchanged.
+ * The feed also says whether the activity is proven to belong to this handoff
+ * (attribution) and whether the Cloud PC was released. Both are passed through
+ * unchanged; the claim id comes only from the run result, never from step text.
  */
 
-import type { DirectLineUpdate } from "./directLineClient";
+import type { DirectLineUpdate, LiveActivity, LiveRelease } from "./directLineClient";
 import { DirectLineError } from "./directLineClient";
 
-/** A single completed Computer Use action as returned by the progress endpoint. */
+/** A single logged Computer Use action as returned by the progress endpoint. */
 interface CuaProgressStep {
   /** Monotonic index of the action within the run (0-based). */
   index: number;
-  /** The agent's reasoning/narration for this action. */
-  reasoning?: string;
-  /** Screenshot the agent captured for this action (data URI or https URL). */
-  screenshotUrl?: string;
-  /** Claim id if this step surfaced one (format CLM-YYYY-NNNNNN). */
-  claimId?: string;
+  /** The agent's own explanation for this action; null when none was logged. */
+  explanation?: string | null;
+  /** Simulation-only note, present only when the feed is simulated. */
+  note?: string | null;
+  action?: string | null;
+  application?: string | null;
+  at?: string | null;
+  /** The screenshot logged with this action (root-relative, https or data URI). */
+  screenshotUrl?: string | null;
 }
 
 /** Shape returned by GET /api/cua-run/{id}/progress. */
@@ -47,9 +51,16 @@ interface CuaProgressResponse {
   claimId?: string;
   /** Human-readable failure reason when status === "failed". */
   errorMessage?: string;
+  /** Whether the shown activity is proven to belong to this handoff. */
+  activity?: LiveActivity;
+  /** Cloud PC release, separate from the claim. */
+  release?: LiveRelease;
+  /** True when the feed is a labelled simulation, not a real agent run. */
+  simulated?: boolean;
 }
 
-const CLAIM_ID_RE = /CLM-\d{4}-\d{6}/;
+/** After the claim, keep reading only to learn whether the Cloud PC was released. */
+const RELEASE_FOLLOW_UP_MS = 10 * 60 * 1000;
 
 /** True for the DOMException thrown when a fetch/delay is aborted. */
 function isAbortError(err: unknown): boolean {
@@ -81,6 +92,8 @@ export interface RunCuaViaTriggerOptions {
   callContext: unknown;
   /** Narration language so the agent narrates in the UI language. */
   lang: "en" | "ja";
+  /** Region displayed by the app, checked by region-bound services before starting. */
+  regionId?: string;
   onUpdate: (update: DirectLineUpdate) => void;
   signal?: AbortSignal;
   pollIntervalMs?: number;
@@ -94,13 +107,13 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-async function startRun(baseUrl: string, callContext: unknown, lang: string, signal?: AbortSignal): Promise<string> {
+async function startRun(baseUrl: string, callContext: unknown, lang: string, regionId?: string, signal?: AbortSignal): Promise<string> {
   let res: Response;
   try {
     res = await fetch(`${baseUrl.replace(/\/+$/, "")}/cua-run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ callContext, lang }),
+      body: JSON.stringify({ callContext, lang, regionId }),
       signal
     });
   } catch (err) {
@@ -109,6 +122,14 @@ async function startRun(baseUrl: string, callContext: unknown, lang: string, sig
     );
   }
   if (!res.ok) {
+    if (res.status === 409) {
+      const error: unknown = await res.json().catch(() => null);
+      if (error && typeof error === "object" && "code" in error && error.code === "REGION_MISMATCH") {
+        throw new DirectLineError(
+          "The selected region does not match this service. Refresh the app and select its available region before transferring."
+        );
+      }
+    }
     throw new DirectLineError(`Could not start the AI run (HTTP ${res.status}).`);
   }
   const body = (await res.json().catch(() => ({}))) as { runId?: string };
@@ -127,14 +148,18 @@ async function getProgress(baseUrl: string, runId: string, signal?: AbortSignal)
     status: body.status ?? "running",
     steps: Array.isArray(body.steps) ? body.steps : [],
     claimId: body.claimId,
-    errorMessage: body.errorMessage
+    errorMessage: body.errorMessage,
+    activity: body.activity,
+    release: body.release,
+    simulated: body.simulated === true
   };
 }
 
 /**
  * Start a CUA run via the autonomous-trigger path and stream near-live progress
- * via polling, emitting narration/screenshot/claim/error/done updates until the
- * run reaches a terminal state, the deadline passes, or the signal aborts.
+ * via polling, emitting step/activity/release/claim/error/done updates until the
+ * run reaches a terminal state, the deadline passes, or the signal aborts. After a
+ * claim, polling continues only while the Cloud PC release is still pending.
  *
  * Resolves when the run reaches a terminal state; never rejects — failures are
  * delivered as an "error" update so the caller has a single code path (mirrors
@@ -146,14 +171,17 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
   const { onUpdate, signal } = opts;
   let claimed = false;
   let renderedThrough = -1; // highest step index already pushed to the UI
+  let lastActivity = "";
+  let lastRelease = "";
 
   try {
-    const runId = await startRun(opts.baseUrl, opts.callContext, opts.lang, signal);
+    const runId = await startRun(opts.baseUrl, opts.callContext, opts.lang, opts.regionId, signal);
     if (signal?.aborted) return;
     onUpdate({ type: "queued" });
 
     const start = Date.now();
     let done = false;
+    let succeededAt: number | null = null;
 
     while (!done && Date.now() - start < maxMs) {
       await delay(pollMs, signal);
@@ -170,17 +198,28 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
         throw err;
       }
 
+      const activity: LiveActivity | undefined = prog.simulated
+        ? { state: "simulated", simulated: true }
+        : prog.activity;
+      const activityKey = activity ? JSON.stringify(activity) : "";
+      if (activity && activityKey !== lastActivity) {
+        lastActivity = activityKey;
+        onUpdate({ type: "activity", activity });
+      }
+
       // Render only steps we haven't shown yet, in order.
       for (const step of prog.steps.filter((s) => s.index > renderedThrough).sort((a, b) => a.index - b.index)) {
-        if (step.reasoning) onUpdate({ type: "narration", text: step.reasoning });
-        if (step.screenshotUrl) {
-          onUpdate({ type: "screenshot", imageUrl: resolveScreenshotUrl(opts.baseUrl, step.screenshotUrl) });
-        }
-        const claim = step.claimId || (step.reasoning ? step.reasoning.match(CLAIM_ID_RE)?.[0] : undefined);
-        if (claim && !claimed) {
-          claimed = true;
-          onUpdate({ type: "claim", claimId: claim });
-        }
+        onUpdate({
+          type: "step",
+          step: {
+            explanation: prog.simulated ? null : (step.explanation ?? null),
+            note: prog.simulated ? (step.note ?? null) : null,
+            action: step.action ?? null,
+            application: step.application ?? null,
+            at: step.at ?? null,
+            imageUrl: step.screenshotUrl ? resolveScreenshotUrl(opts.baseUrl, step.screenshotUrl) : null
+          }
+        });
         renderedThrough = step.index;
       }
 
@@ -189,8 +228,16 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
         onUpdate({ type: "claim", claimId: prog.claimId });
       }
 
+      const releaseKey = prog.release ? JSON.stringify(prog.release) : "";
+      if (prog.release && releaseKey !== lastRelease) {
+        lastRelease = releaseKey;
+        onUpdate({ type: "release", release: prog.release });
+      }
+
       if (prog.status === "succeeded") {
-        done = true;
+        succeededAt = succeededAt ?? Date.now();
+        const releasePending = prog.release?.state === "pending";
+        done = !releasePending || Date.now() - succeededAt >= RELEASE_FOLLOW_UP_MS;
       } else if (prog.status === "failed") {
         onUpdate({
           type: "error",
@@ -200,7 +247,7 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
       }
     }
 
-    if (!done) {
+    if (!done && succeededAt === null) {
       onUpdate({ type: "error", errorMessage: "The agent did not finish before the time limit." });
     }
   } catch (err) {

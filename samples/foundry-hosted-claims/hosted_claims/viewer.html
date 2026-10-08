@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claims agent - same-session viewer</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("scoutTheme");
+    const theme =
+      param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef;
+  --cp-bg-elevated: #fcfbf8;
+  --cp-surface: #ffffff;
+  --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede;
+  --cp-border-strong: #919191;
+  --cp-text: #242424;
+  --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b;
+  --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08);
+  --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a;
+  --cp-danger: #dc2626;
+  --cp-warning: #f59e0b;
+  --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-panel: rgba(255, 255, 255, 0.86);
+  --cp-panel-strong: rgba(255, 255, 255, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.55);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a;
+  --cp-bg-elevated: #343231;
+  --cp-surface: #292929;
+  --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747;
+  --cp-border-strong: #5f5f5f;
+  --cp-text: #dedede;
+  --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1;
+  --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14);
+  --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80;
+  --cp-danger: #f87171;
+  --cp-warning: #fbbf24;
+  --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-panel: rgba(41, 41, 41, 0.72);
+  --cp-panel-strong: rgba(41, 41, 41, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.04);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--cp-bg); color:var(--cp-text); font-family:"Segoe UI",Aptos,Calibri,-apple-system,BlinkMacSystemFont,sans-serif; }
+header, main { max-width:1440px; margin:auto; padding:24px; }
+header { display:flex; align-items:center; gap:24px; justify-content:space-between; }
+h1 { font-size:28px; margin:0 0 8px; } h2 { font-size:18px; margin:0 0 16px; }
+p { margin:8px 0; } small,.muted { color:var(--cp-text-muted); }
+.badge { padding:8px 12px; border:1px solid var(--cp-border); border-radius:10px; background:var(--cp-surface); }
+.controls { display:flex; gap:12px; align-items:end; flex-wrap:wrap; }
+label { display:grid; gap:8px; font-size:14px; }
+button,select,input { font:inherit; padding:10px 12px; border:1px solid var(--cp-border-strong); border-radius:10px; background:var(--cp-surface); color:var(--cp-text); }
+button { cursor:pointer; } button.primary { background:var(--cp-accent); color:var(--cp-accent-fg); border-color:var(--cp-accent); }
+button:hover:not(:disabled) { border-color:var(--cp-accent); } button:disabled { opacity:.5; cursor:not-allowed; }
+button:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid var(--cp-accent); outline-offset:3px; }
+.grid { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-top:16px; }
+.card { border:1px solid var(--cp-border); background:var(--cp-surface); border-radius:16px; padding:20px; min-width:0; }
+.wide { grid-column:1/-1; } #computer { height:560px; background:var(--cp-surface-soft); border:1px solid var(--cp-border); border-radius:10px; overflow:hidden; }
+#empty-screen { padding:32px; } #activity { height:440px; overflow:auto; padding:0; list-style:none; }
+#activity li { border-bottom:1px solid var(--cp-border); padding:12px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.error { color:var(--cp-danger); } .success { color:var(--cp-success); }
+pre { white-space:pre-wrap; overflow-wrap:anywhere; font-family:Consolas,"Courier New",Courier,monospace; font-size:13px; }
+@media(max-width:900px) { .grid { grid-template-columns:1fr; } header { display:block; } #computer { height:400px; } }
+</style>
+</head>
+<body>
+<header><div><h1>Claims agent</h1><p class="muted">Foundry hosted code + Windows 365. Separate from the Copilot Studio demo.</p></div><span class="badge" id="connection">Not connected</span></header>
+<main>
+<section class="card">
+<div class="controls">
+<label>Prepared request<select id="handoff"><option value="">Loading prepared requests…</option></select></label>
+<label>Milestone<select id="operation"><option value="smoke">1. Acquire, open Claims, release</option><option value="claims">2. File the demonstration claim</option></select></label>
+<button class="primary" id="start" disabled>Start approved run</button>
+<label>Request ID<input id="request" placeholder="REQ-2026-0001" autocomplete="off"></label>
+<button id="resume">Watch existing run</button>
+<button id="cancel" disabled>Cancel and release</button>
+<button id="recover" disabled>Retry release only</button>
+</div>
+<p id="notice" role="status">No live run has started. Nothing here is simulated.</p>
+<p id="error" class="error" role="alert"></p>
+</section>
+<div class="grid">
+<section class="card wide"><h2>Plan</h2><p id="plan">Waiting for the hosted agent's actual plan event.</p><small>Application plan and model explanations are labelled separately. Private reasoning is not displayed.</small></section>
+<section class="card"><h2>Computer</h2><p id="session" class="muted">No Cloud PC acquired.</p><button id="watch" disabled>Watch this Cloud PC</button><p id="screen-status" role="status">Passive viewing only. No human takeover.</p><div id="computer"><p id="empty-screen">The official Microsoft screen-share viewer will appear here for the exact acquired session. No prerecorded screen or substitute desktop.</p></div></section>
+<section class="card"><h2>Activity</h2><ul id="activity" aria-live="polite"></ul></section>
+<section class="card wide"><h2>Outcome</h2><pre id="outcome">No verified outcome.</pre><small>A submitted claim and successful session release are separate facts.</small></section>
+</div>
+</main>
+<script>
+"use strict";
+const approved = __LIVE_APPROVED__;
+const $ = id => document.getElementById(id);
+let handoff = null, current = null, snapshot = null, pollTimer = null, viewer = null, loadedSdk = null, watchAttempt = 0;
+if (!approved) $("notice").textContent = "Cloud approval is pending. This viewer can open, but cannot contact Foundry or start a task.";
+async function api(data) {
+  const response = await fetch("/api", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+  // Only this local viewer sets the header; a hosted response body is never trusted for it.
+  const delivery = response.headers.get("X-Viewer-Delivery");
+  let body;
+  try { body = await response.json(); }
+  catch { throw Object.assign(new Error(`Unreadable viewer response (${response.status})`), {delivery}); }
+  if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), {delivery});
+  return body;
+}
+function failure(error) { $("error").textContent = error.message; }
+function stopViewer() {
+  const previous = viewer;
+  viewer = null;
+  watchAttempt++;
+  if (previous) {
+    previous.stop();
+    $("screen-status").textContent = "Screen disconnected. Check Activity and Outcome for the agent's status.";
+  }
+}
+function render(state) {
+  snapshot = state;
+  $("connection").textContent = state.running ? "Live run active" : (state.outcome ? "Run finished" : "Run not active");
+  const plans = state.events.filter(e => e.type === "plan");
+  $("plan").textContent = plans.length ? `Application plan: ${plans.at(-1).message}` : "Waiting for a plan event.";
+  $("activity").replaceChildren();
+  for (const event of state.events) {
+    const row = document.createElement("li");
+    row.textContent = `${event.timestamp || ""} [${event.source || "application"}] ${event.type}\n${event.tool || ""} ${event.message || ""}${event.arguments ? "\n" + JSON.stringify(event.arguments) : ""}`;
+    $("activity").appendChild(row);
+  }
+  $("session").textContent = state.computer ? `Same Cloud PC session: ${state.computer.session_id}` : "No Cloud PC acquired.";
+  $("watch").disabled = !state.running || !state.computer || !!state.release;
+  $("watch").classList.toggle("primary", !$("watch").disabled);
+  $("cancel").disabled = !state.running;
+  $("recover").disabled = state.running || !state.computer || state.release?.status === "accepted";
+  $("outcome").textContent = state.outcome ? JSON.stringify({task:state.outcome,latest_release:state.release}, null, 2) : (
+    state.interrupted ? "Execution was interrupted. Do not rerun the claim. Retry release only, then inspect the application before any new request." : "No verified outcome."
+  );
+  if (state.release || state.outcome) stopViewer();
+  if (state.outcome || state.interrupted) clearTimeout(pollTimer);
+}
+async function poll() {
+  clearTimeout(pollTimer);
+  const id = current;
+  try {
+    const state = await api({action:"status",request_id:id});
+    if (id !== current) return;
+    render(state);
+    if (state.running || (!state.outcome && !state.interrupted)) pollTimer = setTimeout(poll,1000);
+  } catch (error) {
+    failure(error);
+    $("connection").textContent = "Connection lost - result unknown";
+    $("notice").textContent = "The hosted task may still be running. Use Watch existing run to reconnect; do not start another claim.";
+  }
+}
+let prepared = [];
+const uncertainStarts = new Set();
+async function loadPrepared() {
+  try {
+    const response = await fetch("/handoffs", {cache:"no-store"});
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `Prepared requests unavailable (${response.status})`);
+    prepared = body.handoffs;
+    const options = [new Option(prepared.length ? "Choose a prepared request" : "No prepared requests found", "")];
+    prepared.forEach((item, index) => options.push(new Option(`${item.handoff.request_id} - ${item.name}`, String(index))));
+    $("handoff").replaceChildren(...options);
+  } catch(error) {
+    $("handoff").replaceChildren(new Option("Prepared requests unavailable", ""));
+    failure(error);
+  }
+}
+$("handoff").onchange = () => {
+  const item = prepared[Number($("handoff").value)];
+  handoff = $("handoff").value === "" || !item ? null : structuredClone(item.handoff);
+  $("request").value = handoff ? handoff.request_id : "";
+  $("start").disabled = !approved || !handoff || uncertainStarts.has(handoff.request_id);
+  $("error").textContent = "";
+};
+$("start").onclick = async () => {
+  let sent = false;
+  try {
+    if (!handoff || handoff.request_id !== $("request").value) throw new Error("The request ID must match the loaded handoff.");
+    $("start").disabled = true; $("error").textContent = ""; stopViewer();
+    current = handoff.request_id;
+    sent = true;
+    await api({action:"start",operation:$("operation").value,request_id:current,handoff});
+    location.hash = encodeURIComponent(current);
+    $("notice").textContent = "The hosted agent accepted this request. Activity below comes from that run.";
+    await poll();
+  } catch(error) {
+    failure(error);
+    if (sent && error.delivery !== "not_sent") {
+      // Unless this viewer proved nothing was sent, the hosted agent may have this start: never send it again.
+      uncertainStarts.add(current);
+      location.hash = encodeURIComponent(current);
+      $("connection").textContent = "Start result unknown";
+      $("notice").textContent = "The hosted agent may have received this request. Use Watch existing run; do not start another claim.";
+    } else {
+      $("start").disabled = !approved;
+    }
+  }
+};
+$("resume").onclick = async () => {
+  current = $("request").value.trim(); location.hash = encodeURIComponent(current);
+  $("error").textContent = ""; stopViewer(); await poll();
+};
+$("cancel").onclick = async () => {
+  try { await api({action:"cancel",request_id:current}); await poll(); } catch(error) { failure(error); }
+};
+$("recover").onclick = async () => {
+  try { await api({action:"recover",request_id:current}); await poll(); } catch(error) { failure(error); }
+};
+async function viewDetails() {
+  const data = await api({action:"view",request_id:current});
+  if (data.request_id !== current || data.session_id !== snapshot?.computer?.session_id || data.mode !== "viewOnly") {
+    throw new Error("Viewing response does not match this acquired session.");
+  }
+  return data;
+}
+async function loadSdk(url) {
+  if (loadedSdk === url) return;
+  if (loadedSdk) throw new Error("Screen SDK changed during this viewer session. Reload before reconnecting.");
+  await new Promise((resolve,reject) => {
+    const script = document.createElement("script");
+    script.src = url; script.onload = resolve; script.onerror = () => reject(new Error("Official screen-share SDK could not load."));
+    document.head.appendChild(script);
+  });
+  if (typeof window.ScreenShareViewer !== "function") throw new Error("SDK did not expose ScreenShareViewer.");
+  loadedSdk = url;
+}
+$("watch").onclick = async () => {
+  stopViewer();
+  const attempt = watchAttempt;
+  try {
+    const data = await viewDetails();
+    await loadSdk(data.sdk_url);
+    if (attempt !== watchAttempt) return;
+    if (data.request_id !== current || !snapshot?.running || snapshot.release) throw new Error("Run changed while the viewer was loading.");
+    $("computer").replaceChildren();
+    const attached = new window.ScreenShareViewer({
+      container:$("computer"),computerUrl:data.computer_url,viewerUrl:data.viewer_url,mode:"viewOnly"
+    });
+    viewer = attached;
+    const isCurrent = () => viewer === attached && current === data.request_id &&
+      snapshot?.running && !snapshot.release && snapshot.computer?.session_id === data.session_id;
+    let reported = false;
+    $("screen-status").textContent = "Connecting to the acquired Cloud PC. Waiting for the SDK connection status.";
+    attached.on("statusChanged", async (state,message) => {
+      if (!isCurrent()) return;
+      $("screen-status").textContent = `Screen: ${state}${message ? " - " + message : ""}`;
+      if (state === "disconnected" || state === "controlling") {
+        stopViewer();
+        if (state === "controlling") failure(new Error("Unexpected control mode. Viewing stopped; takeover is not approved."));
+        return;
+      }
+      if (reported || !["connected","view-only"].includes(state)) return;
+      reported = true;
+      try {
+        await api({action:"view_ready",request_id:data.request_id,session_id:data.session_id});
+        if (isCurrent()) $("screen-status").textContent = "Watching the agent's acquired session. View only.";
+      } catch(error) {
+        if (isCurrent()) { stopViewer(); failure(error); }
+      }
+    });
+    attached.on("error", async (code,message) => {
+      if (!isCurrent()) return;
+      if (code === "TOKEN_EXPIRED") {
+        try {
+          const fresh = await viewDetails();
+          if (!isCurrent()) return;
+          if (fresh.computer_url !== data.computer_url || fresh.viewer_url !== data.viewer_url) {
+            throw new Error("Screen endpoint changed during token refresh.");
+          }
+          await attached.updateToken(fresh.token);
+        } catch(error) { if (isCurrent()) { stopViewer(); failure(error); } }
+      } else {
+        stopViewer();
+        failure(new Error(`${code}: ${message}. Use Watch this Cloud PC to reconnect.`));
+      }
+    });
+    // This resolves at iframe readiness, not at a connected screen.
+    await attached.connect(data.token);
+  } catch(error) { if (attempt === watchAttempt) { stopViewer(); failure(error); } }
+};
+if (location.hash) $("request").value = decodeURIComponent(location.hash.slice(1));
+loadPrepared();
+window.addEventListener("beforeunload", stopViewer);
+</script>
+</body>
+</html>

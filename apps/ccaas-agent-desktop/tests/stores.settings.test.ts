@@ -4,6 +4,7 @@ import { useSettingsStore } from "@/stores/useSettingsStore";
 describe("useSettingsStore", () => {
   beforeEach(() => {
     useSettingsStore.getState().resetToDefaults();
+    useSettingsStore.setState({ regions: [], activeRegionId: "" });
   });
 
   it("defaults to CUA off, a non-empty orchestrator URL, and a positive typewriter speed", () => {
@@ -35,6 +36,22 @@ describe("useSettingsStore", () => {
     s = useSettingsStore.getState();
     expect(s.backend).toBe("mcs");
     expect(s.orchestratorUrl).toBe("/api");
+  });
+
+  it("keeps Foundry routing separate from MCS region hydration and switching", () => {
+    useSettingsStore.getState().setBackend("foundry");
+    useSettingsStore.getState().hydrateRegions({
+      activeRegionId: "au",
+      regions: [
+        { id: "au", label: "AU", directLineTokenUrl: "", orchestratorUrl: "https://au/api" },
+        { id: "us", label: "US", directLineTokenUrl: "", orchestratorUrl: "https://us/api" }
+      ]
+    });
+    expect(useSettingsStore.getState().orchestratorUrl).toBe("http://localhost:4000");
+    useSettingsStore.getState().setActiveRegion("us");
+    expect(useSettingsStore.getState().orchestratorUrl).toBe("http://localhost:4000");
+    useSettingsStore.getState().setBackend("mcs");
+    expect(useSettingsStore.getState().orchestratorUrl).toBe("https://us/api");
   });
 
   it("hydrateRegions populates regions and resolves the active Direct Line URL", () => {

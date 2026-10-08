@@ -1,0 +1,34 @@
+{
+  "_README": "Copy to foundry-agent.local.json and fill your environment values. The local file is git-ignored. Do not put secrets, tokens, passwords, or connection strings here. Leave the four CLAIMS_*_ID values empty for the first deployment (gates no); fill them from the deployment receipt and Set-FoundryAgentIdentity.ps1, then deploy again.",
+  "tenantId": "00000000-0000-0000-0000-000000000000",
+  "subscriptionId": "00000000-0000-0000-0000-000000000000",
+  "resourceGroup": "zava-demo-rg",
+  "containerRegistryName": "zavaclaimsregistry",
+  "imageRepository": "claims-w365",
+  "imageTag": "v1",
+  "imageDigest": "",
+  "foundryProjectEndpoint": "https://<account>.services.ai.azure.com/api/projects/<project>",
+  "agentName": "claims-w365",
+  "expectedInstanceIdentityClientId": "",
+  "configureEndpoint": false,
+  "hostedAgent": {
+    "description": "Zava Claims hosted agent version",
+    "metadata": {
+      "purpose": "zava-claims-demo"
+    },
+    "environmentVariables": {
+      "LIVE_EXECUTION_APPROVED": "no",
+      "CLAIMS_EXECUTION_APPROVED": "no",
+      "PYTHON_ENVIRONMENT": "Production",
+      "HOST": "0.0.0.0",
+      "AZURE_AI_MODEL_DEPLOYMENT_NAME": "gpt-4.1-mini",
+      "CLAIMS_TENANT_ID": "",
+      "CLAIMS_BLUEPRINT_ID": "",
+      "CLAIMS_AGENT_ID": "",
+      "CLAIMS_AGENT_USER_ID": "",
+      "CLAIMS_AUTH_TYPE": "identity_proxy_manager",
+      "SCREEN_SHARE_SDK_URL": "https://packages.global.cloudinferenceplatform.azure.com/screenshare-sdk/1.0.0/screenshare-embed.js"
+    }
+  },
+  "outputReceiptPath": "deploy/foundry/foundry-agent-deployment.local.json"
+}

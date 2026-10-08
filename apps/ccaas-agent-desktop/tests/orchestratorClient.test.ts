@@ -7,6 +7,41 @@ import {
 } from "@/lib/orchestratorClient";
 
 describe("orchestratorClient", () => {
+  it.each([
+    { backend: "mcs", body: { status: "queued" } },
+    { backend: "mcs", body: { status: "queued", handoff_id: "job", request_id: "REQ-2024-9999" } },
+    { backend: "mcs", body: { status: "queued", handoff_id: "job", request_id: null } },
+    { backend: "foundry", body: { status: "queued", handoff_id: "job", execution_mode: "simulation" } },
+    { backend: "foundry", body: { status: "queued", handoff_id: "job", request_id: "REQ-2024-9999", execution_mode: "simulation" } },
+    { backend: "foundry", body: { status: "queued", request_id: "REQ-2024-0001" } }
+  ] as const)("rejects uncorrelated or incomplete $backend acknowledgements: $body", async ({ backend, body }) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 202 }));
+    await expect(postHandoff("/api", {
+      request_id: "REQ-2024-0001", caller_phone: "(555) 123-4567", intent: "auto_collision",
+      summary: "x", requested_by: { agent_id: "csr-x", display_name: "X" },
+      timestamp: "2024-04-15T18:32:11Z", target_backend: backend
+    })).rejects.toBeInstanceOf(OrchestratorError);
+  });
+
+  it.each([{}, { request_id: "REQ-2024-9999", status: "queued" }])(
+    "rejects a missing or mismatched POST acknowledgement instead of inventing success",
+    async (body) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify(body)));
+      await expect(postHandoff("http://orchestrator.test", {
+        request_id: "REQ-2024-0001", caller_phone: "(555) 123-4567", intent: "auto_collision",
+        summary: "x", requested_by: { agent_id: "csr-x", display_name: "X" },
+        timestamp: "2024-04-15T18:32:11Z"
+      })).rejects.toThrow(/invalid|match/i);
+    }
+  );
+
+  it("rejects a submitted response with no claim ID", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      request_id: "REQ-2024-0001", status: "submitted"
+    })));
+    await expect(getHandoffStatus("/api", "job")).rejects.toThrow(/invalid/i);
+  });
+
   it("postHandoff returns the parsed payload on success", async () => {
     const payload = { request_id: "REQ-2024-0001", status: "queued" };
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
@@ -115,5 +150,11 @@ describe("orchestratorClient", () => {
   it("pingOrchestrator returns false on network failure", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new TypeError("nope"));
     expect(await pingOrchestrator("http://broken.test", 50)).toBe(false);
+  });
+
+  it("does not call a healthy bridge Foundry-ready without a runner", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true, foundry: { available: false } })));
+    expect(await pingOrchestrator("http://foundry.test", 1500, "foundry")).toBe(false);
   });
 });

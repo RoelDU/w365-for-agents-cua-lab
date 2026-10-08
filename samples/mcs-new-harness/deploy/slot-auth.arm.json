@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "purpose": "Isolated auth-only Python slot on an existing compatible Linux Functions plan.",
+    "storage": "Only AzureWebJobsStorage is inherited, by server-side ARM reference. No secret outputs.",
+    "scope": "No production settings/runtime write, swap, plan, storage account, identity, grant or PC creation."
+  },
+  "parameters": {
+    "parentAppName": {"type": "string"},
+    "slotName": {"type": "string"},
+    "location": {"type": "string"},
+    "serverFarmId": {"type": "string"},
+    "hostId": {"type": "string", "minLength": 1, "maxLength": 32},
+    "publicOrigin": {"type": "string"},
+    "tenantId": {"type": "string"},
+    "apiAudience": {"type": "string"},
+    "mcpClientId": {"type": "string"},
+    "useScope": {"type": "string"},
+    "pythonVersion": {"type": "string", "defaultValue": "3.11", "allowedValues": ["3.11"]}
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/sites/slots",
+      "apiVersion": "2024-04-01",
+      "name": "[format('{0}/{1}', parameters('parentAppName'), parameters('slotName'))]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp,linux",
+      "properties": {
+        "serverFarmId": "[parameters('serverFarmId')]",
+        "reserved": true,
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "[concat('Python|', parameters('pythonVersion'))]",
+          "minTlsVersion": "1.2",
+          "ftpsState": "Disabled",
+          "appSettings": [
+            {"name": "AzureWebJobsStorage", "value": "[list(concat(resourceId('Microsoft.Web/sites', parameters('parentAppName')), '/config/appsettings'), '2024-04-01').properties.AzureWebJobsStorage]"},
+            {"name": "AzureFunctionsWebHost__hostid", "value": "[parameters('hostId')]"},
+            {"name": "FUNCTIONS_WORKER_RUNTIME", "value": "python"},
+            {"name": "FUNCTIONS_EXTENSION_VERSION", "value": "~4"},
+            {"name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true"},
+            {"name": "ENABLE_ORYX_BUILD", "value": "true"},
+            {"name": "NH_PUBLIC_ORIGIN", "value": "[parameters('publicOrigin')]"},
+            {"name": "NH_TENANT_ID", "value": "[parameters('tenantId')]"},
+            {"name": "NH_API_AUDIENCE", "value": "[parameters('apiAudience')]"},
+            {"name": "NH_MCP_CLIENT_ID", "value": "[parameters('mcpClientId')]"},
+            {"name": "NH_USE_SCOPE", "value": "[parameters('useScope')]"},
+            {"name": "NH_PRESERVE_SWA_HEADER", "value": "false"},
+            {"name": "ZAVA_GATEWAY_ENABLED", "value": "false"},
+            {"name": "ZAVA_REQUEST_REGISTRATION_ENABLED", "value": "false"},
+            {"name": "ZAVA_DELAY_PROBE_ENABLED", "value": "false"}
+          ]
+        }
+      }
+    }
+  ]
+}

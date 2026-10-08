@@ -39,6 +39,12 @@ export interface RegionOption {
    * rebuild).
    */
   cuaRunBaseUrl?: string;
+  /**
+   * Optional base URL (ending /api) of the isolated "MCS - new harness
+   * (experimental)" relay (/nh-claims/*). Absent = that destination reports
+   * "not configured"; it never falls back to the other backends.
+   */
+  newHarnessBaseUrl?: string;
 }
 
 export interface ResolvedRegionConfig {
@@ -84,7 +90,14 @@ function sanitizeRegions(raw: unknown): RegionOption[] {
       typeof o.cuaRunBaseUrl === "string" && o.cuaRunBaseUrl.trim()
         ? o.cuaRunBaseUrl.trim()
         : undefined;
-    out.push({ id, label, directLineTokenUrl, orchestratorUrl, cuaRunBaseUrl });
+    const newHarnessBaseUrl =
+      typeof o.newHarnessBaseUrl === "string" && o.newHarnessBaseUrl.trim()
+        ? o.newHarnessBaseUrl.trim()
+        : undefined;
+    out.push({
+      id, label, directLineTokenUrl, orchestratorUrl, cuaRunBaseUrl,
+      ...(newHarnessBaseUrl ? { newHarnessBaseUrl } : {})
+    });
   }
   return out;
 }

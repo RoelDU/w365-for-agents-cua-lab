@@ -1,0 +1,11 @@
+{
+  "metadata_verification_enabled": false,
+  "tenant_id": "<verified-tenant-guid>",
+  "inbound_client_id": "<customer-inbound-oauth-client-guid>",
+  "blueprint_id": "<dedicated-customer-owned-blueprint-guid>",
+  "agent_identity_app_id": "<agent-identity-app-guid>",
+  "agent_user_id": "<agent-user-object-guid>",
+  "endpoint": "<exact-https-w365-mcp-url-from-approved-discovery>",
+  "computer_scope": "<verified-a365-resource-and-delegated-scope>",
+  "viewer_scope": "<verified-view-resource>/Computer.See"
+}

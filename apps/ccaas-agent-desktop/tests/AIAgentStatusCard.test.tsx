@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AIAgentStatusCard } from "@/components/workflow/AIAgentStatusCard";
 import { useHandoffStore } from "@/stores/useHandoffStore";
@@ -67,5 +67,27 @@ describe("<AIAgentStatusCard> (smoke)", () => {
     expect(screen.getByText("POLICY_NOT_FOUND")).toBeInTheDocument();
     expect(screen.getByTestId("handoff-retry")).toBeInTheDocument();
     expect(screen.getByTestId("handoff-fallback")).toBeInTheDocument();
+  });
+
+  it("scrolls the error, its message and the request ID into view when the handoff fails", () => {
+    const scrolled: Element[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this); };
+    try {
+      useHandoffStore.getState().beginHandoff(ctx, { handoffId: "handoff-1" });
+      render(
+        <TooltipProvider>
+          <AIAgentStatusCard onReset={() => undefined} />
+        </TooltipProvider>
+      );
+      expect(scrolled).toHaveLength(0);
+      act(() => useHandoffStore.getState().setError("UNKNOWN", "Foundry start was not sent: Sign in again."));
+      const error = screen.getByTestId("ai-status-error");
+      expect(scrolled).toEqual([error]);
+      expect(error).toHaveTextContent("Foundry start was not sent: Sign in again.");
+      expect(error).toHaveTextContent(ctx.request_id);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 });

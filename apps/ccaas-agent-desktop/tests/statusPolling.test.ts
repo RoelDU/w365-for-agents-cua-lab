@@ -94,4 +94,16 @@ describe("subscribeToStatus (polling-only)", () => {
 
     sub.stop();
   });
+
+  it("stops with a visible failure callback after three consecutive read failures", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Bridge stopped")));
+    const onFailure = vi.fn();
+    const onUpdate = vi.fn();
+    subscribeToStatus({
+      baseUrl: "/api", handoffId: "job", pollIntervalMs: 100, onFailure, onUpdate
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onFailure).toHaveBeenCalledOnce();
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
 });
