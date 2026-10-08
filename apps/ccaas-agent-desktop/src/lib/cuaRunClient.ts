@@ -242,11 +242,15 @@ export async function runCuaViaTrigger(opts: RunCuaViaTriggerOptions): Promise<v
         const releasePending = prog.release?.state === "pending";
         done = !releasePending || Date.now() - succeededAt >= RELEASE_FOLLOW_UP_MS;
       } else if (prog.status === "failed") {
-        onUpdate({
-          type: "error",
-          errorMessage: prog.errorMessage || "The AI run did not complete successfully.",
-          ...(prog.outcome === "uncertain" ? { uncertain: true } : {})
-        });
+        // A claim already confirmed for this run stays: a later failed read is about the
+        // Cloud PC release follow-up, not about the claim. Stop following it.
+        if (!claimed) {
+          onUpdate({
+            type: "error",
+            errorMessage: prog.errorMessage || "The AI run did not complete successfully.",
+            ...(prog.outcome === "uncertain" ? { uncertain: true } : {})
+          });
+        }
         done = true;
       }
     }

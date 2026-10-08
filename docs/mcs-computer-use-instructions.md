@@ -118,34 +118,52 @@ Final result: one line, "Claim CLM-YYYY-NNNNNN has been filed" or "Filing failed
   The sample-data fallback only applies if a run starts without a handoff.
 - **Unchanged from 5 October 2026:** the agent instructions, exact launch command and flags, Policy # radio and left
   search box (the right-hand box is read-only), the intent-to-loss-type map, one Submit after
-  checking the review, the claim-number sentence the handoff service reads (it accepts exactly
-  one claim, in the completion line; see below), and release by `shutdown /l`.
+  checking the review, the claim-number sentence the handoff service reads (together with the
+  logged Submit Claim and confirmation clicks; see below), and release by `shutdown /l`.
 
 ## How the handoff service recognises a filed claim
 
 The handoff service (`apps\handoff-orchestrator`, `GET /api/cua-run/{runId}/progress` with
-`CUA_REQUIRE_REAL_RESULT=1`) reports a claim only from the documented completion line
-"Claim CLM-YYYY-NNNNNN has been filed" (optionally followed by "successfully", then the end of
-the sentence or a comma), stated on its own: at the start of the text, a sentence or a line,
-optionally after the agent's `**mental_note**` marker. It reads that line in the agent's reply
-saved on this handoff's own Dataverse row or, when that reply is not there yet, in the
-explanations logged by the Computer use session whose conversation that row names. A claim
-number that is only mentioned, negated ("has not been filed"), qualified ("has been filed
-previously"), asked about, planned or quoted in a condition or history note ("If Claim ...",
-"Policy history: Claim ...") is not a filed claim.
+`CUA_REQUIRE_REAL_RESULT=1`) uses two sources, both tied to this handoff:
 
-| Agent result | Service status | Zava |
+- **The Computer use log of this handoff's own conversation** (the conversation named by the
+  receipt the trigger flow saves on this handoff's Dataverse row). For every click, Computer use
+  records the control under the pointer: its process, name and automation ID. The service needs
+  a click on Claims' **Submit Claim** button (automation ID `7604`), followed by a click on a
+  control of the **FNOL Submitted** dialog (`5900`-`5902`, normally **OK** `5902`). Claims shows
+  that dialog only after a successful submission (see
+  `apps\legacy-claims-workstation\src\resource.h` and `res\claims.rc`).
+- **The claim number the agent stated while that dialog was on screen**: the only number in its
+  explanations from the Submit click up to and including its first click on the dialog. A
+  number it had already mentioned before the Submit (for example an older claim on the policy)
+  is never accepted as the new claim. If the agent's final reply is present, it must report the
+  same claim as filed ("Claim CLM-YYYY-NNNNNN has been filed").
+
+| Evidence | Service status | Zava |
 | --- | --- | --- |
-| One claim in the completion line | `succeeded` with that claim number | Shows the claim. |
-| "Filing failed: CODE" | `failed` | Shows the code; Retry offered. |
-| Reply without Computer Use, after the grace period | `failed` | Not filed; Retry offered. |
-| Anything else that ended: uncertain reply, conflicting claims, wrong conversation, a session that ended without the line | `failed` with `outcome: "uncertain"` | "STOPPED - OUTCOME UNKNOWN", no Retry. The request stays as the last transfer through reset and reload, and no new AI transfer to any destination starts until someone selects "I checked the claims system". An uncertain Foundry request blocks Copilot Studio transfers the same way. |
+| Submit Claim, then the FNOL Submitted dialog, with one new number stated there (and a matching reply, if any) | `succeeded` with that number, kept even if the Cloud PC session later ends with an error | Shows the claim; the Cloud PC release is reported separately. |
+| No Submit Claim click, and the reply "Filing failed: CODE" | `failed` | Shows the code; Retry offered. |
+| No Computer use session for the conversation and a reply that is not a filed claim, after the grace period | `failed` | Not filed; Retry offered. |
+| Anything else that ended: Submit clicked without the dialog, the dialog without one new number, a reply that disagrees with the log, a filed-claim reply with no Submit and dialog in the log | `failed` with `outcome: "uncertain"` | "STOPPED - OUTCOME UNKNOWN", no Retry. The request stays as the last transfer through reset and reload, and no new AI transfer to any destination starts until someone selects "I checked the claims system". An uncertain Foundry request blocks Copilot Studio transfers the same way. |
 
-The line is the agent's own statement, read from its reply or log. Unlike the Foundry agent,
-which reads the confirmation dialog itself, this path does not independently read the Claims
-screen. Keep the "Result" step and the final-result wording above unchanged, or update this
-check with them.
+While the log does not yet show this evidence, the run stays `running`.
 
+What this establishes, and what it does not:
+
+- **Observed by Computer use:** this run clicked Submit Claim and then a control of the dialog
+  Claims shows only after a successful submission. These are platform records, not the
+  agent's words.
+- **Still the agent's words:** the claim number. Computer use logs which control was clicked,
+  not the text shown in it, and the service does not read the screenshot. The number is the one
+  the agent stated while the dialog was on screen. The Foundry agent, by contrast, reads the
+  dialog's claim field itself.
+- Of the eleven Computer use logs captured from the reference environment between 2 and 7 October
+  2026 (UTC), the ten in which the agent reported a claim all show this sequence, with the
+  number stated at the OK click; the one in which it reported no claim shows no Submit Claim
+  click.
+- Keep the "Result" step above (read the number from the confirmation, then click OK) and the
+  final-result wording unchanged, or update this check with them. A Submit made with the
+  keyboard instead of a click is not recognised and ends as "outcome unknown".
 ## How the call's details reach Computer use
 
 The tool instructions contain the placeholder `{System.Activity.Text}`. At run time Copilot

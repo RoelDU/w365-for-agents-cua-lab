@@ -238,9 +238,19 @@ test("an Australian service accepts its matching region with the complete handof
   });
 });
 
+// The Computer Use log of a run that filed `id`: Submit Claim, then OK on "FNOL Submitted",
+// with the number stated at the confirmation (the shape logged in the 7 October reference runs).
+function claimsEvidence(conversation, id = "CLM-2026-001234") {
+  return [submitClick(undefined, undefined, conversation), realConfirmation(id, conversation)];
+}
+
 function completedRunResponse(options, row = {}) {
   if (options.method === "POST") return { crcce_claimrequestid: "row-test-42" };
-  if (options.path.includes("/flowsession_flowlog_parentobjectid")) return { value: [] };
+  if (options.path.includes("/flowsession_flowlog_parentobjectid")) {
+    // The session belongs to the conversation named by this row's receipt, when there is one.
+    const receipt = row.crcce_handoffreceipt ? JSON.parse(row.crcce_handoffreceipt) : null;
+    return { value: receipt && typeof receipt.conversation_id === "string" && receipt.conversation_id ? claimsEvidence(receipt.conversation_id) : [] };
+  }
   if (options.path.includes("/flowsessions?")) {
     return { value: [{ flowsessionid: "session-42", completedon: "2026-10-01T07:00:00Z" }] };
   }
@@ -334,11 +344,12 @@ test("real-result mode does not terminate this handoff from an uncorrelated mach
 test("a previous failed session cannot prevent the new handoff's receipt reaching the interaction", async (t) => {
   let receiptReady = false;
   const { start, progress } = loadStart(t, { CUA_REQUIRE_REAL_RESULT: "1" }, (options) => {
+    const previous = { flowsessionid: "previous-session", completedon: "2026-10-01T07:00:00Z", errorcode: "NoCandidateMachine" };
     if (options.path.includes("/flowsessions?")) {
-      return { value: [{
-        flowsessionid: "previous-session", completedon: "2026-10-01T07:00:00Z",
-        errorcode: "NoCandidateMachine"
-      }] };
+      return { value: receiptReady ? [previous, { flowsessionid: "new-session", completedon: null }] : [previous] };
+    }
+    if (options.path.includes("/flowsession_flowlog_parentobjectid")) {
+      return { value: options.path.includes("new-session") ? claimsEvidence("new-conversation") : [] };
     }
     return completedRunResponse(options, receiptReady ? {
       crcce_handoffreceipt: JSON.stringify({
@@ -359,7 +370,9 @@ test("a previous failed session cannot prevent the new handoff's receipt reachin
   assert.equal(completed.jsonBody.claimId, "CLM-2026-001234");
 });
 
-test("the exact-row receipt returns the result even when machine-session history is not visible yet", async (t) => {
+// Release QA follow-up R6: the reply alone is not evidence of a submission, so the claim waits
+// for this conversation's own Computer Use log (Submit Claim, then the confirmation).
+test("the exact-row receipt waits for this conversation's own log before reporting a claim", async (t) => {
   const { start, progress } = loadStart(t, { CUA_REQUIRE_REAL_RESULT: "1" }, (options) => {
     if (options.path.includes("/flowsessions?")) return { value: [] };
     return completedRunResponse(options, {
@@ -372,8 +385,8 @@ test("the exact-row receipt returns the result even when machine-session history
   });
   const started = await start({ callContext, lang: "en" });
   const completed = await progress(started.jsonBody.runId);
-  assert.equal(completed.jsonBody.status, "succeeded");
-  assert.equal(completed.jsonBody.claimId, "CLM-2026-001234");
+  assert.equal(completed.jsonBody.status, "running");
+  assert.equal(completed.jsonBody.claimId, null);
 });
 
 // ---------------------------------------------------------------------------
@@ -458,7 +471,7 @@ test("a run id without its request row still cannot be finished on a new instanc
 // Truthful progress (ticket 06): explanations and actions come only from the
 // Computer Use action log of the session attributed to this exact handoff.
 // ---------------------------------------------------------------------------
-function actionLog({ conversation = "conv-42", at, explanation, action = "LeftClick", app = "Claims", shot, message, type = 100000401 }) {
+function actionLog({ conversation = "conv-42", at, explanation, action = "LeftClick", app = "Claims", shot, message, type = 100000401, control }) {
   return {
     type,
     createdon: at,
@@ -468,7 +481,8 @@ function actionLog({ conversation = "conv-42", at, explanation, action = "LeftCl
       actionContext: {
         id: message || `msg-${at}`,
         requestPrompt: "Fixed tool instruction that must never be shown as an explanation.",
-        actionItems: [{ type: action, name: action }],
+        // control: the UI element Computer Use recorded under the click, as in the real log.
+        actionItems: [{ type: action, name: action, ...(control ? { context: [control] } : {}) }],
         target: { processName: app },
         llmInstruction: explanation === undefined ? {} : { output: explanation },
         ...(shot ? { screenshot: { flowSessionBinaryId: shot } } : {})
@@ -591,12 +605,13 @@ test("the receipt verifies the shown conversation and reports release separately
   const started = await start({ callContext, lang: "en" });
   await progress(started.jsonBody.runId);
 
+  world.logs["session-42"].push(...claimsEvidence("conv-42"));
   world.receipt = receiptFor("conv-42");
   const submitted = (await progress(started.jsonBody.runId)).jsonBody;
   assert.equal(submitted.status, "succeeded");
   assert.equal(submitted.claimId, "CLM-2026-001234");
   assert.equal(submitted.activity.state, "verified");
-  assert.equal(submitted.steps.length, 2);
+  assert.equal(submitted.steps.length, 4);
   assert.deepEqual(submitted.release, { state: "pending" });
 
   world.sessions[0] = { ...world.sessions[0], completedon: "2026-10-02T01:08:00Z", errorcode: "SessionHasLoggedOff", statuscode: 8 };
@@ -622,6 +637,9 @@ test("a receipt for a different conversation withdraws the shown activity but ke
   const started = await start({ callContext, lang: "en" });
   assert.equal((await progress(started.jsonBody.runId)).jsonBody.steps.length, 2);
 
+  // The receipt's own conversation ran in a session this handoff had not shown.
+  world.sessions.push({ flowsessionid: "session-else", createdon: "2026-10-02T01:00:30Z", completedon: null });
+  world.logs["session-else"] = claimsEvidence("conv-somewhere-else");
   world.receipt = receiptFor("conv-somewhere-else");
   const result = (await progress(started.jsonBody.runId)).jsonBody;
   assert.equal(result.status, "succeeded");
@@ -668,7 +686,7 @@ test("the claim number comes from the verified conversation's own logged confirm
   const started = await start({ callContext, lang: "en" });
   assert.equal((await progress(started.jsonBody.runId)).jsonBody.status, "running");
 
-  world.logs["session-42"].push(filedLine("CLM-2026-004321"), filedLine("CLM-2026-004321", "2026-10-02T01:05:10Z"));
+  world.logs["session-42"].push(submitClick(), realConfirmation("CLM-2026-004321"));
   const result = (await progress(started.jsonBody.runId)).jsonBody;
   assert.equal(result.status, "succeeded");
   assert.equal(result.claimId, "CLM-2026-004321");
@@ -693,7 +711,7 @@ for (const [name, change] of [
     world.sessions[0] = { ...world.sessions[0], completedon: "2026-10-02T01:08:00Z", errorcode: "SessionHasLoggedOff" };
   }],
   ["logs conflicting claim numbers", (world) => {
-    world.logs["session-42"].push(filedLine("CLM-2026-004321"), filedLine("CLM-2026-009999", "2026-10-02T01:05:10Z"));
+    world.logs["session-42"].push(submitClick(), confirmOk("Claim CLM-2026-004321 has been filed. Claim CLM-2026-009999 has been filed."));
   }]
 ]) {
   test(`a verified session that ${name} is reported as unverifiable, not guessed`, async (t) => {
@@ -806,7 +824,9 @@ test("an agent reply 'Filing failed: CODE' is a definite failure that may be ret
 });
 
 test("the documented completion line in the reply still returns the claim at once", async (t) => {
-  const result = await progressFor(t, liveWorld({ receipt: receiptFor("conv-42", ["Claim CLM-2026-001234 has been filed"]) }));
+  const world = liveWorld({ receipt: receiptFor("conv-42", ["Claim CLM-2026-001234 has been filed"]) });
+  world.logs["session-42"].push(...claimsEvidence("conv-42"));
+  const result = await progressFor(t, world);
   assert.equal(result.status, "succeeded");
   assert.equal(result.claimId, "CLM-2026-001234");
 });
@@ -828,7 +848,7 @@ for (const [name, explanation] of [
 
 test("with an early receipt, the verified conversation's completion line returns the claim at once", async (t) => {
   const world = liveWorld({ receipt: receiptFor("conv-42", []) });
-  world.logs["session-42"].push(filedLine("CLM-2026-004321"));
+  world.logs["session-42"].push(submitClick(), realConfirmation("CLM-2026-004321"));
   const result = await progressFor(t, world);
   assert.equal(result.status, "succeeded");
   assert.equal(result.claimId, "CLM-2026-004321");
@@ -870,9 +890,115 @@ for (const line of [
 ]) {
   test(`the reference completion line "${line.slice(0, 50)}..." returns its claim`, async (t) => {
     const world = liveWorld({ receipt: receiptFor("conv-42", []) });
-    world.logs["session-42"].push(actionLog({ at: "2026-10-02T01:05:00Z", message: "msg-real", explanation: line }));
+    world.logs["session-42"].push(submitClick(), confirmOk(line));
     const result = await progressFor(t, world);
     assert.equal(result.status, "succeeded");
     assert.match(result.claimId, /^CLM-2024-00700[45]$/);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Release QA follow-up R6 (9 Oct 2026): a convincing sentence is not a submission.
+// The Computer Use log records the control under each click (actionItems[].context, as in
+// the reference runs of 7 October 2026). A claim counts only when this handoff's own
+// conversation clicked Claims' "Submit Claim" (7604) and then a control of the "FNOL
+// Submitted" dialog (5900-5902), which Claims shows only after a successful submission.
+// The number is the one the agent read while that dialog was on screen.
+// ---------------------------------------------------------------------------
+var CLAIMS_CONTROL = { resourceType: "Application", fileDescription: "Zava Mutual Claims Workstation", productName: "Zava Mutual Claims Workstation", processName: "claims" };
+function submitClick(at = "2026-10-02T01:04:50Z", explanation = "**mental_note** Step 5 Review_Submit shows the requested facts.\n\nClicking Submit Claim button once to file the claim.", conversation = "conv-42") {
+  return actionLog({ conversation, at, message: `msg-submit-${at}`, explanation, control: { ...CLAIMS_CONTROL, name: "Submit Claim", controlType: "ControlType.Button", automationId: "7604" } });
+}
+function confirmOk(explanation, at = "2026-10-02T01:05:00Z", conversation = "conv-42") {
+  return actionLog({ conversation, at, message: `msg-ok-${at}`, explanation, control: { ...CLAIMS_CONTROL, name: "OK", controlType: "ControlType.Button", automationId: "5902" } });
+}
+function realConfirmation(id, conversation = "conv-42") {
+  return confirmOk(`**mental_note** Claim ${id} has been filed, now releasing the workstation.\n\nClicking OK to close the confirmation dialog.`, undefined, conversation);
+}
+const OLD = "The policy lists an older claim. Claim CLM-2024-000111 has been filed.";
+const DENIED = "Claim CLM-2024-000111 has been filed. That is the previous claim; no new claim was submitted.";
+const ended = (world, errorcode = "SessionHasLoggedOff") => {
+  world.sessions[0] = { ...world.sessions[0], completedon: "2026-10-02T01:08:00Z", errorcode };
+};
+
+for (const [name, reply] of [["names an older claim", OLD], ["says no new claim was submitted", DENIED]]) {
+  test(`R6: a reply that ${name}, with no Submit and confirmation in the log, is not a filed claim`, async (t) => {
+    const world = liveWorld({ receipt: receiptFor("conv-42", [reply]) });
+    ended(world);
+    const result = await progressFor(t, world);
+    assert.equal(result.status, "failed");
+    assert.equal(result.claimId, null);
+    assert.equal(result.outcome, "uncertain");
+  });
+
+  test(`R6: a reply that ${name} conflicts with the number read from this run's confirmation`, async (t) => {
+    const world = liveWorld({ receipt: receiptFor("conv-42", [reply]) });
+    world.logs["session-42"].push(submitClick(), realConfirmation("CLM-2026-004321"));
+    const result = await progressFor(t, world);
+    assert.equal(result.claimId, null);
+    assert.equal(result.outcome, "uncertain");
+  });
+}
+
+test("R6: a number already mentioned before this run's Submit is not the claim that Submit created", async (t) => {
+  const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+  world.logs["session-42"].push(
+    actionLog({ at: "2026-10-02T01:03:00Z", message: "msg-history", explanation: OLD }),
+    submitClick(),
+    confirmOk(DENIED)
+  );
+  const result = await progressFor(t, world);
+  assert.equal(result.claimId, null);
+  assert.notEqual(result.status, "succeeded");
+});
+
+test("R6: an older claim mentioned before Submit does not hide the new claim read from the confirmation", async (t) => {
+  const world = liveWorld({ receipt: receiptFor("conv-42", []) });
+  world.logs["session-42"].push(
+    actionLog({ at: "2026-10-02T01:03:00Z", message: "msg-history", explanation: OLD }),
+    submitClick(),
+    realConfirmation("CLM-2026-004321")
+  );
+  const result = await progressFor(t, world);
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.claimId, "CLM-2026-004321");
+});
+
+test("R6: the documented reply alone, before this run's Submit and confirmation are logged, keeps waiting", async (t) => {
+  const result = await progressFor(t, liveWorld({ receipt: receiptFor("conv-42", ["Claim CLM-2026-001234 has been filed"]) }));
+  assert.equal(result.status, "running");
+  assert.equal(result.claimId, null);
+});
+
+test("R6: the reference sequence returns the claim at once, before release, with or without a reply", async (t) => {
+  for (const responses of [[], ["Claim CLM-2024-007004 has been filed"]]) {
+    const world = liveWorld({ receipt: receiptFor("conv-42", responses) });
+    world.logs["session-42"].push(submitClick(), realConfirmation("CLM-2024-007004"));
+    const result = await progressFor(t, world);
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.claimId, "CLM-2024-007004");
+    assert.deepEqual(result.release, { state: "pending" });
+  }
+});
+
+test("R6: a confirmed claim keeps its number when the Cloud PC session later ends with an error", async (t) => {
+  const world = liveWorld({ receipt: receiptFor("conv-42", ["Claim CLM-2024-007004 has been filed"]) });
+  world.logs["session-42"].push(submitClick(), realConfirmation("CLM-2024-007004"));
+  const { start, progress } = loadStart(t, { CUA_REQUIRE_REAL_RESULT: "1" }, world.respond);
+  const started = await start({ callContext, lang: "en" });
+  assert.equal((await progress(started.jsonBody.runId)).jsonBody.claimId, "CLM-2024-007004");
+  ended(world, "SessionTerminated");
+  const later = (await progress(started.jsonBody.runId)).jsonBody;
+  assert.equal(later.status, "succeeded");
+  assert.equal(later.claimId, "CLM-2024-007004");
+  assert.equal(later.release.state, "ended-with-error");
+});
+
+test("R6: 'Filing failed' after this run clicked Submit is uncertain, not a retryable failure", async (t) => {
+  const world = liveWorld({ receipt: receiptFor("conv-42", ["Filing failed: UNKNOWN"]) });
+  world.logs["session-42"].push(submitClick());
+  ended(world);
+  const result = await progressFor(t, world);
+  assert.equal(result.claimId, null);
+  assert.equal(result.outcome, "uncertain");
+});

@@ -279,4 +279,23 @@ describe("MCS result the service cannot prove (mock HTTP, not live proof)", () =
     fireEvent.click(screen.getByTestId("open-transfer-directory"));
     await waitFor(() => expect(screen.getByTestId("handoff-to-ai-mcs")).not.toBeDisabled());
   }, 12000);
+
+  it("keeps a confirmed claim when a later poll for the Cloud PC release fails", async () => {
+    let poll = 0;
+    server.use(
+      http.post("http://mcs.test/api/cua-run", () => HttpResponse.json({ runId: "r-kept" })),
+      http.get("http://mcs.test/api/cua-run/r-kept/progress", () => {
+        poll += 1;
+        return HttpResponse.json(poll === 1
+          ? { status: "succeeded", claimId: "CLM-2024-007004", steps: [], activity: { state: "verified", conversationId: "c1" }, release: { state: "pending" } }
+          : { status: "failed", outcome: "uncertain", claimId: null, steps: [], errorMessage: "Could not verify this handoff's result: the exact handoff row is unavailable after a service restart. A claim may or may not have been filed. Check its run record; do not submit another handoff." });
+      })
+    );
+    await transfer();
+    await waitFor(() => expect(screen.getByTestId("ai-status-claim-id")).toHaveTextContent("CLM-2024-007004"), { timeout: 4500 });
+    await waitFor(() => expect(poll).toBeGreaterThanOrEqual(2), { timeout: 6000 });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(useHandoffStore.getState().status).toBe("submitted");
+    expect(useHandoffStore.getState().claimId).toBe("CLM-2024-007004");
+  }, 12000);
 });

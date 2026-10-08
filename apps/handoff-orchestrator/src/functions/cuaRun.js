@@ -316,29 +316,10 @@ async function liveProgress(run, runId) {
 
   if (requireRealResult) {
     if (!receipt) return { status: "running", steps, activity, release, claimId: null };
-    if (receipt.claimId) return { status: "succeeded", steps, activity, release, claimId: receipt.claimId };
-    if (receipt.reply === "failed") {
-      return {
-        status: "failed", steps, activity, release, claimId: null,
-        errorMessage: `The agent reported "Filing failed: ${receipt.failure}", so no claim was filed.`
-      };
-    }
-    // The agent has replied but no Computer Use session ever appeared: it answered
-    // without operating the Cloud PC, so nothing was filed.
-    if (activity.state === "unavailable" && receipt.replied && Date.now() - run.unownedSince >= noActivityGraceMs()) {
-      return {
-        status: "failed", steps, activity, release, claimId: null,
-        errorMessage: "The agent replied without using Computer Use, so no claim was filed. Check its run record; do not submit another handoff."
-      };
-    }
-    if (receipt.reply === "uncertain" && activity.state !== "unavailable") {
-      return {
-        ...uncertain("The agent's reply does not confirm a filed claim in its documented words" +
-          (receipt.mentioned.length ? ` (it mentions ${receipt.mentioned.join(", ")}).` : ".")),
-        steps, activity, release
-      };
-    }
-    return { ...claimFromVerifiedLog(activity, shown, steps), steps, activity, release };
+    // The receipt on this row names the conversation; only that conversation's own log counts.
+    const owned = sessions.filter((s) => conversationOf(s) === receipt.conversationId);
+    const evidence = submissionEvidence(owned.flatMap((s) => run.logs[s.flowsessionid].rows));
+    return { ...realResult(run, receipt, evidence, owned), steps, activity, release };
   }
   // Legacy demo-result mode (CUA_REQUIRE_REAL_RESULT unset): unchanged result tiers,
   // including completion from the agent's latest session. Never the live AU path.
@@ -349,20 +330,109 @@ async function liveProgress(run, runId) {
   return { status, steps, activity, release, claimId };
 }
 
+// What the Computer Use log itself recorded under each click (actionItems[].context), from the
+// Claims app's fixed control IDs (apps/legacy-claims-workstation/src/resource.h):
+// IDC_FNOL_SUBMIT "Submit Claim", and the controls of IDD_CONFIRM_CLAIM ("FNOL Submitted"),
+// the dialog Claims shows only after a successful submission.
+const CLAIMS_PROCESS = "claims";
+const SUBMIT_CLAIM = "7604";
+const CONFIRMATION_DIALOG = new Set(["5900", "5901", "5902"]);
+const CLAIM_ID = /\bCLM-\d{4}-\d{6}\b/g;
+
 /**
- * "Execute Agent and wait" can save the receipt before a Computer Use run ends, with
- * no responses yet. The receipt still names the conversation, so the claim is taken
- * from that verified conversation's own logged explanations, but only from the
- * documented completion line ("Claim CLM-... has been filed"): exactly one such claim
- * succeeds; conflicting claims, or a session that ended without one, are uncertain.
+ * Whether this conversation's own Computer Use log shows that it submitted a claim, and which.
+ * The platform records the controls clicked: "Submit Claim", then a control of the "FNOL
+ * Submitted" dialog. The claim number is the only one the agent stated from that Submit up to
+ * and including its first action on the dialog, i.e. while the dialog was on screen. A number
+ * already mentioned before the Submit cannot be the claim that Submit created.
  */
-function claimFromVerifiedLog(activity, shown, steps) {
-  if (activity.state === "mismatch") return uncertain("This handoff's agent conversation did not match the activity shown.");
-  if (activity.state !== "verified") return { status: "running", claimId: null };
-  const ids = filedClaims(steps.map((s) => s.explanation || ""));
-  if (ids.length > 1) return uncertain("The agent's log reports more than one filed claim.");
-  if (ids.length === 1) return { status: "succeeded", claimId: ids[0] };
-  if (shown.every((s) => s.completedon)) return uncertain("The agent's session ended without reporting a filed claim in its log.");
+function submissionEvidence(rows) {
+  const before = new Set();
+  const atConfirmation = new Set();
+  let submitted = false;
+  let confirmed = false;
+  for (const row of rows) {
+    const action = row.data && row.data.actionContext;
+    if (!LOG_ACTION_TYPES.has(row.type) || !action) continue;
+    const said = action.llmInstruction && typeof action.llmInstruction.output === "string" ? action.llmInstruction.output : "";
+    const named = said.match(CLAIM_ID) || [];
+    const controls = (Array.isArray(action.actionItems) ? action.actionItems : [])
+      .flatMap((item) => (Array.isArray(item.context) ? item.context : []))
+      .filter((c) => c && String(c.processName || "").toLowerCase() === CLAIMS_PROCESS)
+      .map((c) => String(c.automationId || ""));
+    if (!submitted) {
+      named.forEach((id) => before.add(id));
+      submitted = controls.includes(SUBMIT_CLAIM);
+      continue;
+    }
+    named.forEach((id) => atConfirmation.add(id));
+    if (controls.some((c) => CONFIRMATION_DIALOG.has(c))) {
+      confirmed = true;
+      break;
+    }
+  }
+  const ids = [...atConfirmation];
+  const reused = ids.filter((id) => before.has(id));
+  if (!confirmed || !ids.length) return { submitted, confirmed, claimId: null, conflict: null };
+  if (reused.length) {
+    return { submitted, confirmed, claimId: null, conflict: `The number at this run's confirmation (${reused.join(", ")}) was already mentioned before its Submit, so it is not the new claim.` };
+  }
+  if (ids.length > 1) {
+    return { submitted, confirmed, claimId: null, conflict: `The agent named more than one claim number at this run's confirmation (${ids.join(", ")}).` };
+  }
+  return { submitted, confirmed, claimId: ids[0], conflict: null };
+}
+
+/**
+ * The result of a real-result run from this row's receipt and its conversation's log.
+ * Succeeded only with submission evidence; the agent's reply, if any, must name the same
+ * claim. Once established, the claim is kept even if the Cloud PC session later fails.
+ * A run that clicked Submit is never reported as a definite (retryable) failure.
+ */
+function realResult(run, receipt, evidence, owned) {
+  if (run.confirmedClaim) return { status: "succeeded", claimId: run.confirmedClaim };
+  const ended = owned.length > 0 && owned.every((s) => s.completedon);
+  if (evidence.claimId) {
+    if (receipt.reply !== "none" && !(receipt.reply === "filed" && receipt.claimId === evidence.claimId)) {
+      return uncertain(`This run's confirmation shows claim ${evidence.claimId}, but the agent's reply does not report that claim as filed.`);
+    }
+    run.confirmedClaim = evidence.claimId;
+    return { status: "succeeded", claimId: evidence.claimId };
+  }
+  if (evidence.conflict) return uncertain(evidence.conflict);
+  if (evidence.submitted) {
+    if (receipt.reply !== "none" || ended) {
+      return uncertain(evidence.confirmed
+        ? "This run clicked Submit Claim and the confirmation appeared, but the agent did not name its claim number there."
+        : "This run clicked Submit Claim, but its log shows no confirmation dialog.");
+    }
+    return { status: "running", claimId: null };
+  }
+  if (receipt.reply === "failed") {
+    return {
+      status: "failed", claimId: null,
+      errorMessage: `The agent reported "Filing failed: ${receipt.failure}" and its log shows no Submit Claim, so no claim was filed.`
+    };
+  }
+  // The agent has replied but no Computer Use session ever appeared for its conversation.
+  if (!owned.length && receipt.replied) {
+    run.unownedSince = run.unownedSince || Date.now();
+    if (Date.now() - run.unownedSince < noActivityGraceMs()) return { status: "running", claimId: null };
+    if (receipt.reply === "filed") return uncertain("The agent reported a filed claim, but no Computer Use activity was found for its conversation.");
+    return {
+      status: "failed", claimId: null,
+      errorMessage: "The agent replied without using Computer Use, so no claim was filed. Check its run record; do not submit another handoff."
+    };
+  }
+  if (receipt.reply === "uncertain" && owned.length) {
+    return uncertain("The agent's reply does not confirm a filed claim" +
+      (receipt.mentioned.length ? ` (it mentions ${receipt.mentioned.join(", ")}).` : "."));
+  }
+  if (ended) {
+    return uncertain(receipt.reply === "filed"
+      ? `The agent reported claim ${receipt.claimId} as filed, but its log shows no Submit Claim followed by the confirmation.`
+      : "The agent's session ended without a Submit Claim followed by the confirmation.");
+  }
   return { status: "running", claimId: null };
 }
 

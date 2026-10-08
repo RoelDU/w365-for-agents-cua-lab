@@ -88,6 +88,10 @@ needs; it needs no checkout or developer tools.
   its permission (`CloudPC.Read.All`) is tenant-wide read access to Cloud PC data.
 - The MCS Computer Use tool receives the handoff only through its tool instructions
   (`{System.Activity.Text}`); see [`docs\mcs-computer-use-instructions.md`](docs/mcs-computer-use-instructions.md).
+- On the MCS path the handoff service establishes from the Computer Use log that this run
+  clicked Submit Claim and then the confirmation dialog, but the claim number itself is the one
+  the agent stated at that dialog; nothing reads the number off the screen. The Foundry agent
+  reads it from the dialog itself.
 - Use synthetic data and a dedicated low-privilege demo pool. The agent's Claims-only
   instructions are not an operating-system security boundary.
 - Windows 365 for Agents, Agent 365 tooling and Foundry hosted agents are new services; names,
