@@ -10,6 +10,8 @@
  * (the agent still releases the Cloud PC).
  */
 
+import { validateError, validateResult } from "@/lib/schemas";
+
 export interface FoundryEvent {
   type: string;
   sequence?: number;
@@ -21,6 +23,11 @@ export interface FoundryEvent {
   session_id?: string;
   tool?: string;
   release_status?: string;
+  request_id?: string;
+  /** Outcome only: whether this run sent Submit Claim (agents from October 2026 on). */
+  submit_sent?: boolean;
+  /** Error events: where the run stopped, including whether Submit Claim had been sent. */
+  context?: { stage?: string; last_tool_started?: string | null; submit_sent?: boolean };
   result?: {
     request_id?: string;
     status?: string;
@@ -211,6 +218,40 @@ export type FoundryUpdate =
   | { type: "outcome"; outcome: FoundryEvent }
   | { type: "error"; message: string; failure: FoundryFailure }
   | { type: "done" };
+
+export type FoundryRunResult =
+  | { kind: "submitted"; claimId: string; agentId: string }
+  | { kind: "error"; code: string; message: string; possiblySubmitted: boolean };
+
+/**
+ * The hosted agent's terminal outcome for `requestId`, read only from the agent's own result.
+ * A result that names another request, or none, is never shown as this request's claim.
+ * Whether Submit Claim may have been sent comes from the outcome's submit_sent; for an agent
+ * that does not report it, only the submit_sent of its own error event (`evidence`) is
+ * trusted, and without either the claim is treated as possibly filed.
+ */
+export function readFoundryOutcome(outcome: FoundryEvent, requestId: string, evidence?: boolean): FoundryRunResult {
+  const r = outcome.result ?? {};
+  const own = (outcome.request_id === undefined || outcome.request_id === requestId) && r.request_id === requestId;
+  if (outcome.status === "submitted") {
+    if (own && validateResult(r) && r.claim_id && r.agent_id) {
+      return { kind: "submitted", claimId: r.claim_id, agentId: r.agent_id };
+    }
+    return {
+      kind: "error",
+      code: "UNKNOWN",
+      message: "The Foundry agent reported a submitted claim, but its result does not belong to this request or does not match the claims contract.",
+      possiblySubmitted: true
+    };
+  }
+  const sent = typeof outcome.submit_sent === "boolean" ? outcome.submit_sent : evidence;
+  return {
+    kind: "error",
+    code: outcome.status === "error" && own && validateError(r) && r.error_code ? r.error_code : "UNKNOWN",
+    message: (r.message || outcome.message || "The Foundry run ended without filing a claim.").slice(0, 1000),
+    possiblySubmitted: sent !== false
+  };
+}
 
 export interface RunFoundryHostedOptions {
   baseUrl: string;

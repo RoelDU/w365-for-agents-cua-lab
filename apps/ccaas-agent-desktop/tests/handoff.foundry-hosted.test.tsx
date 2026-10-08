@@ -106,7 +106,7 @@ function available(ready: boolean, message = ready ? "Foundry hosted agent is av
 }
 
 function ev(sequence: number, type: string, extra: Record<string, unknown> = {}) {
-  return { type, sequence, request_id: "x", timestamp: `2026-10-02T01:00:${String(sequence).padStart(2, "0")}Z`, source: "application", ...extra };
+  return { type, sequence, timestamp: `2026-10-02T01:00:${String(sequence).padStart(2, "0")}Z`, source: "application", ...extra };
 }
 
 async function openFoundry() {
@@ -150,11 +150,11 @@ describe("separate Foundry hosted transfer (mock HTTP and a fake viewer, not liv
       ev(1, "plan", { message: "Acquire a Cloud PC, then open Claims." }),
       ev(2, "computer", { session_id: "sess-1", screen_share_url: "https://screen" })
     ];
-    const later = [
+    const later = (id: unknown) => [
       ev(3, "explanation", { explanation_type: "assistant_text", message: "Search for the caller's policy.", source: "model" }),
       ev(4, "release", { session_id: "sess-1", status: "accepted" }),
-      ev(5, "outcome", { status: "submitted", release_status: "accepted",
-        result: { request_id: "x", status: "submitted", claim_id: "CLM-2026-000321", agent_id: "foundry", timestamp: "2026-10-02T01:01:00Z" } })
+      ev(5, "outcome", { request_id: id, status: "submitted", submit_sent: true, release_status: "accepted",
+        result: { request_id: id, status: "submitted", claim_id: "CLM-2026-000321", agent_id: "C1001", timestamp: "2026-10-02T01:01:00Z" } })
     ];
     server.use(
       available(true),
@@ -170,8 +170,9 @@ describe("separate Foundry hosted transfer (mock HTTP and a fake viewer, not liv
         const body = await request.json() as Record<string, unknown>;
         bodies.push(body);
         const after = typeof body.after_sequence === "number" ? body.after_sequence : 0;
-        const events = [...acquired, ...later].filter((e) => (e.sequence ?? 0) > after);
-        return HttpResponse.json({ events, computer: acquired[1], outcome: later[2], release: later[1], running: false, interrupted: false });
+        const tail = later(body.request_id);
+        const events = [...acquired, ...tail].filter((e) => (e.sequence ?? 0) > after);
+        return HttpResponse.json({ events, computer: acquired[1], outcome: tail[2], release: tail[1], running: false, interrupted: false });
       })
     );
     fireEvent.click(await openFoundry());
@@ -419,15 +420,16 @@ describe("separate Foundry hosted transfer (mock HTTP and a fake viewer, not liv
   });
 
   it.each([
-    ["a malformed claim number", { status: "submitted", result: { status: "submitted", claim_id: "CLM-1", agent_id: "foundry" } }, "UNKNOWN"],
-    ["an error code outside the contract", { status: "error", result: { status: "error", error_code: "NOT_A_CODE", message: "Bad." } }, "UNKNOWN"],
-    ["a contract error code", { status: "error", result: { status: "error", error_code: "POLICY_NOT_FOUND", message: "No policy." } }, "POLICY_NOT_FOUND"]
+    ["a malformed claim number", (id: unknown) => ({ request_id: id, status: "submitted", submit_sent: true, result: { request_id: id, status: "submitted", claim_id: "CLM-1", agent_id: "C1001", timestamp: "2026-10-02T01:01:00Z" } }), "UNKNOWN"],
+    ["an error code outside the contract", (id: unknown) => ({ request_id: id, status: "error", submit_sent: false, result: { request_id: id, status: "error", error_code: "NOT_A_CODE", message: "Bad.", timestamp: "2026-10-02T01:01:00Z" } }), "UNKNOWN"],
+    ["a contract error code", (id: unknown) => ({ request_id: id, status: "error", submit_sent: false, result: { request_id: id, status: "error", error_code: "POLICY_NOT_FOUND", message: "No policy.", timestamp: "2026-10-02T01:01:00Z" } }), "POLICY_NOT_FOUND"]
   ])("checks the Foundry result against the shared status schema: %s", async (_name, extra, code) => {
     server.use(
       available(true),
       http.post(`${API}/foundry-claims/start`, () => HttpResponse.json({ events: [], computer: null, outcome: null, release: null }, { status: 202 })),
-      http.post(`${API}/foundry-claims/status`, () => {
-        const outcome = ev(1, "outcome", extra);
+      http.post(`${API}/foundry-claims/status`, async ({ request }) => {
+        const body = await request.json() as Record<string, unknown>;
+        const outcome = ev(1, "outcome", extra(body.request_id));
         return HttpResponse.json({ events: [outcome], computer: null, outcome, release: null, running: false, interrupted: false });
       })
     );
@@ -618,7 +620,7 @@ describe("separate Foundry hosted transfer (mock HTTP and a fake viewer, not liv
         const body = await request.json() as Record<string, unknown>;
         statusIds.push(body.request_id);
         const outcome = ev(1, "outcome", { status: "submitted", release_status: "accepted",
-          result: { request_id: body.request_id, status: "submitted", claim_id: "CLM-2026-000777", agent_id: "foundry" } });
+          result: { request_id: body.request_id, status: "submitted", claim_id: "CLM-2026-000777", agent_id: "foundry", timestamp: "2026-10-02T01:01:00Z" } });
         return HttpResponse.json({ events: [outcome], computer: null, outcome, release: null, running: false, interrupted: false });
       })
     );
@@ -654,7 +656,7 @@ describe("separate Foundry hosted transfer (mock HTTP and a fake viewer, not liv
         const body = await request.json() as Record<string, unknown>;
         statusIds.push(body.request_id);
         const outcome = ev(1, "outcome", { status: "submitted", release_status: "accepted",
-          result: { request_id: body.request_id, status: "submitted", claim_id: "CLM-2026-000888", agent_id: "foundry" } });
+          result: { request_id: body.request_id, status: "submitted", claim_id: "CLM-2026-000888", agent_id: "foundry", timestamp: "2026-10-02T01:01:00Z" } });
         return HttpResponse.json({ events: [outcome], computer: null, outcome, release: null, running: false, interrupted: false });
       })
     );
@@ -703,7 +705,7 @@ describe("separate Foundry hosted transfer (mock HTTP and a fake viewer, not liv
         statusIds.push(body.request_id);
         if (!ownerRecorded) return HttpResponse.json({ error: "This Foundry run is not one you started." }, { status: 403 });
         const outcome = ev(1, "outcome", { status: "submitted", release_status: "accepted",
-          result: { request_id: body.request_id, status: "submitted", claim_id: "CLM-2026-000999", agent_id: "foundry" } });
+          result: { request_id: body.request_id, status: "submitted", claim_id: "CLM-2026-000999", agent_id: "foundry", timestamp: "2026-10-02T01:01:00Z" } });
         return HttpResponse.json({ events: [outcome], computer: null, outcome, release: null, running: false, interrupted: false });
       })
     );
@@ -963,4 +965,113 @@ describe("Foundry start latency (mock HTTP and a fake viewer, not live proof)", 
     expect(viewBeforeReadiness).toBe(true);
     expect(views).toBe(1);
   }, 12000);
+});
+
+// Release QA R4/R5 (8 Oct 2026). The hosted agent's own result must belong to this request
+// before it is shown, and an error after Submit may have been sent must keep the request
+// unresolved: no new transfer until a person has checked the claims system.
+describe("Foundry result correlation and submission uncertainty (mock HTTP, not live proof)", () => {
+  const OTHER_REQUEST = "REQ-2026-999999999999";
+
+  function finishWith(build: (requestId: string) => { outcome: Record<string, unknown>; events?: Record<string, unknown>[] }) {
+    const counts = { starts: 0 };
+    server.use(
+      available(true),
+      http.post(`${API}/foundry-claims/start`, () => {
+        counts.starts += 1;
+        return HttpResponse.json({ events: [], computer: null, outcome: null, release: null }, { status: 202 });
+      }),
+      http.post(`${API}/foundry-claims/status`, async ({ request }) => {
+        const body = await request.json() as { request_id: string };
+        const built = build(body.request_id);
+        const before = (built.events ?? []).map((e, i) => ({ ...e, sequence: i + 1 }));
+        const outcome = ev(before.length + 1, "outcome", { release_status: "accepted", ...built.outcome });
+        return HttpResponse.json({ events: [...before, outcome], computer: null, outcome, release: null, running: false, interrupted: false });
+      })
+    );
+    return counts;
+  }
+
+  const submitted = (requestId: string) => ({
+    request_id: requestId, status: "submitted", claim_id: "CLM-2026-000432", agent_id: "C1001", timestamp: "2026-10-08T10:00:00Z"
+  });
+  const failed = (requestId: string, code: string, message: string) => ({
+    request_id: requestId, status: "error", error_code: code, message, timestamp: "2026-10-08T10:00:00Z"
+  });
+
+  async function expectUnresolved() {
+    const error = await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    expect(within(error).getByTestId("ai-status-error-code")).toHaveTextContent("STOPPED - OUTCOME UNKNOWN");
+    expect(within(error).queryByTestId("handoff-retry")).toBeNull();
+    expect(useHandoffStore.getState().status).toBe("error");
+    expect(useHandoffStore.getState().claimId).toBeNull();
+    expect(JSON.parse(sessionStorage.getItem("ccaas:last-transfer") ?? "null")).toMatchObject({ state: "stopped" });
+  }
+
+  it("shows a claim only when the agent's own result names this request", async () => {
+    finishWith((id) => ({ outcome: { request_id: id, status: "submitted", submit_sent: true, result: submitted(id) } }));
+    fireEvent.click(await openFoundry());
+    await waitFor(() => expect(screen.getByTestId("ai-status-claim-id")).toHaveTextContent("CLM-2026-000432"), { timeout: 4500 });
+    expect(JSON.parse(sessionStorage.getItem("ccaas:last-transfer") ?? "null")).toMatchObject({ state: "submitted", claim_id: "CLM-2026-000432" });
+  });
+
+  it.each([
+    ["names another request", (id: string) => ({ request_id: id, status: "submitted", result: submitted(OTHER_REQUEST) })],
+    ["has no request ID", (id: string) => {
+      const { request_id: _drop, ...rest } = submitted(id);
+      return { request_id: id, status: "submitted", result: rest };
+    }],
+    ["comes in an envelope for another request", (id: string) => ({ request_id: OTHER_REQUEST, status: "submitted", result: submitted(id) })]
+  ])("never shows SUBMITTED when the reported claim result %s, and keeps the request unresolved", async (_name, outcome) => {
+    finishWith((id) => ({ outcome: outcome(id) }));
+    fireEvent.click(await openFoundry());
+    await expectUnresolved();
+  });
+
+  it("keeps an error after Submit was sent unresolved through reset and reload, with no Retry", async () => {
+    const counts = finishWith((id) => ({ outcome: { request_id: id, status: "error", submit_sent: true,
+      result: failed(id, "UNKNOWN", "No matching fresh submission confirmation is visible; success is unverified.") } }));
+    fireEvent.click(await openFoundry());
+    await expectUnresolved();
+    fireEvent.click(screen.getByTestId("handoff-fallback"));
+    window.dispatchEvent(new CustomEvent("ccaas:reset-demo"));
+    fireEvent.click(screen.getByTestId("open-transfer-directory"));
+    await waitFor(() => expect(screen.getByTestId("handoff-to-ai-foundry")).toBeDisabled());
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    cleanup();
+    useHandoffStore.getState().reset();
+    resetTransferRecorderForTests();
+    render(<TooltipProvider><RightRail /></TooltipProvider>);
+    const note = await screen.findByTestId("previous-transfer");
+    expect(note).toHaveAttribute("data-state", "stopped");
+    expect(within(note).queryByTestId("previous-transfer-dismiss")).toBeNull();
+    expect(counts.starts).toBe(1);
+  }, 12000);
+
+  it("offers Retry for an error the agent reports before any Submit", async () => {
+    finishWith((id) => ({ outcome: { request_id: id, status: "error", submit_sent: false,
+      result: failed(id, "POLICY_NOT_FOUND", "No unique match for the policy.") } }));
+    fireEvent.click(await openFoundry());
+    const error = await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    expect(within(error).getByTestId("ai-status-error-code")).toHaveTextContent("POLICY_NOT_FOUND");
+    expect(within(error).getByTestId("handoff-retry")).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem("ccaas:last-transfer") ?? "null")).toMatchObject({ state: "error" });
+  });
+
+  it("from an agent that does not report submit_sent, trusts only its error event's context", async () => {
+    finishWith((id) => ({
+      events: [ev(0, "error", { message: "Stopped before Claims.", context: { stage: "launch_claims", submit_sent: false } })],
+      outcome: { request_id: id, status: "error", result: failed(id, "UNKNOWN", "Stopped before Claims.") }
+    }));
+    fireEvent.click(await openFoundry());
+    const error = await screen.findByTestId("ai-status-error", {}, { timeout: 4500 });
+    expect(within(error).getByTestId("handoff-retry")).toBeInTheDocument();
+  });
+
+  it("from an agent that does not report submit_sent, treats an error with no such evidence as possibly filed", async () => {
+    finishWith((id) => ({ outcome: { request_id: id, status: "error", result: failed(id, "POLICY_NOT_FOUND", "Not found.") } }));
+    fireEvent.click(await openFoundry());
+    await expectUnresolved();
+  });
 });

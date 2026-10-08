@@ -419,3 +419,47 @@ async def test_perform_claims_marks_submit_only_when_it_is_actually_sent():
             state=state,
         )
     assert state == {"submit_sent": False}
+
+
+class FullRunNoRejection(FullRun):
+    """The whole hosted run against the Claims fixture with nothing rejected."""
+
+    async def call(self, name, arguments):
+        if name == "click":
+            return await ClaimsApp.call(self, name, arguments)
+        return await super().call(name, arguments)
+
+
+class ConfirmationNotShown(FullRunNoRejection):
+    """Submit files the claim, but no confirmation dialog appears."""
+
+    def submit(self):
+        super().submit()
+        self.dialog = None
+
+
+AFTER_SUBMIT_ERROR = ("finish_claim", {"status": "error", "error_code": "UNKNOWN", "message": "Unsure."})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("app", "turns", "status", "sent"),
+    [
+        (FullRunNoRejection, (*JOURNEY, FILED), "submitted", True),
+        (FullRun, (*JOURNEY, FILED), "error", True),
+        # Release QA R5: the model's own error report after Submit gave no sign of the Submit.
+        (ConfirmationNotShown, (*JOURNEY, AFTER_SUBMIT_ERROR), "error", True),
+        (FullRunNoRejection, (AFTER_SUBMIT_ERROR,), "error", False),
+    ],
+)
+async def test_every_claims_outcome_says_whether_submit_was_sent(app, turns, status, sent):
+    outcome = await run(handoff(), "claims", app(), lambda e: None, model=Script(*turns))
+    assert outcome["status"] == status
+    assert outcome["submit_sent"] is sent
+    assert outcome["release_status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_stops_before_claims_says_submit_was_not_sent():
+    outcome = await run(handoff(), "smoke", RejectsReads(times=10**6), lambda e: None, setup_timeout=0.05, **FAST)
+    assert outcome["status"] == "error" and outcome["submit_sent"] is False

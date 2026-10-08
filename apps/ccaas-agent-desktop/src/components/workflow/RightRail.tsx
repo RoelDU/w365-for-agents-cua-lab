@@ -23,6 +23,7 @@ import {
   getFoundryAvailability,
   getFoundryCapacity,
   prepareFoundryHosted,
+  readFoundryOutcome,
   runFoundryHosted,
   type FoundryEvent
 } from "@/lib/foundryHostedClient";
@@ -543,6 +544,7 @@ export function RightRail() {
       const s = useHandoffStore.getState().status;
       return s === "submitted" || s === "error";
     };
+    let submitEvidence: boolean | undefined;
 
     void runFoundryHosted({
       baseUrl,
@@ -555,6 +557,8 @@ export function RightRail() {
         switch (u.type) {
           case "event": {
             const e = u.event;
+            // An older agent reports whether Submit Claim was sent only on its error event.
+            if (e.type === "error" && typeof e.context?.submit_sent === "boolean") submitEvidence = e.context.submit_sent;
             if (e.type === "computer" && e.session_id) setFoundryRun({ sessionId: e.session_id });
             // Contract 4/5: the live service sends readiness with only a message (never "Ready");
             // any readiness event opens the 120-second viewer window.
@@ -594,25 +598,28 @@ export function RightRail() {
           }
           case "outcome": {
             const o = u.outcome;
-            const r = o.result ?? {};
             setFoundryRun({ running: false });
-            const submitted = {
+            const read = readFoundryOutcome(o, ctx.request_id, submitEvidence);
+            const submitted = read.kind === "submitted" ? {
               request_id: ctx.request_id,
               status: "submitted" as const,
-              claim_id: r.claim_id,
+              claim_id: read.claimId,
               policy_number: ctx.policy_number ?? undefined,
-              agent_id: r.agent_id ?? agent.agent_id
-            };
-            if (o.status === "submitted" && validateHandoffStatus(submitted)) {
+              agent_id: read.agentId
+            } : null;
+            if (submitted && validateHandoffStatus(submitted)) {
               applyStatus(submitted);
-              pushActivity({ level: "info", message: `Claim ${r.claim_id} filed by the Foundry hosted agent.` });
+              pushActivity({ level: "info", message: `Claim ${submitted.claim_id} filed by the Foundry hosted agent.` });
+            } else if (read.kind === "error" && !read.possiblySubmitted) {
+              const code = (validateHandoffStatus({ request_id: ctx.request_id, status: "error", error_code: read.code, message: read.message })
+                ? read.code : "UNKNOWN") as ErrorCode;
+              setHandoffError(code, read.message);
+              pushActivity({ level: "error", message: `Foundry run ended: ${read.message}` });
             } else {
-              const message = (o.status === "submitted"
-                ? "The Foundry agent reported a result that does not match the claims contract."
-                : r.message || o.message || "The Foundry run ended without filing a claim.").slice(0, 1000);
-              const reported = { request_id: ctx.request_id, status: "error" as const, error_code: r.error_code, message };
-              const code: ErrorCode = o.status === "error" && validateHandoffStatus(reported) ? reported.error_code as ErrorCode : "UNKNOWN";
-              setHandoffError(code, message);
+              // Submit Claim may have been sent: keep this request unresolved (no Retry, kept
+              // across reset and reload) until a person has checked the claims system.
+              const message = `${read.kind === "error" ? read.message : ""} A claim may have been filed for ${ctx.request_id}. Check the claims system before any new transfer.`.trim();
+              setHandoffError("UNKNOWN", message, { outcome: "stopped", stage: "status", auth: false, interactionRequired: false, code: "" });
               pushActivity({ level: "error", message: `Foundry run ended: ${message}` });
             }
             break;

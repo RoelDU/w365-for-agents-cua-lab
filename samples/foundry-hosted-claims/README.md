@@ -442,6 +442,11 @@ this after an SDK `connected` or `view-only` status, never just `connect()`
 resolution. These actions all use the same authenticated hosted
 Invocations endpoint and stable hosted session. `status.outcome.result` carries
 the shared result/error contract for Claims. Smoke never claims a business result.
+`status.outcome.submit_sent` says whether this run sent Submit Claim. Zava shows a claim only
+when `outcome.result.request_id` is the transfer's own request ID and the result matches the
+shared contract. After an error with `submit_sent` true or missing (an older agent, unless its
+error event's `context.submit_sent` is false), Zava keeps the request unresolved and offers no
+Retry until a person confirms they checked the claims system.
 
 ### Local viewer: start, preflight and failures
 
