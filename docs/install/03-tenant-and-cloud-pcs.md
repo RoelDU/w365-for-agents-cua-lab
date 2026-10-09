@@ -146,7 +146,7 @@ Do this after the Foundry agent exists (page 6, step 5.7), because the pool is a
 2. In the Intune admin center, go to **Devices > Provision Cloud PCs > Provisioning policies (Agents) > Create policy**.
 3. Choose the Windows 365 for Agents billing plan, Cloud PC count and geography. On the **Agents** page, select **Add Agents** and choose the Foundry Claims hosted agent. Choose the image. Under **Device grouping and preparation**, select **Zava W365A Foundry Claims Devices** from item 1.
 4. For a one-PC demo pool, remember that the Cloud PC resets after each run. The reference one-PC pool took 15-17 minutes to become free again.
-5. Record the pool ID for the worksheet and the Foundry demo prep config.
+5. Record the pool ID for the worksheet (and, if you use it, the optional Foundry demo prep config).
 
 These Cloud PCs use the Windows 365 for Agents pool model **Cloud PC for Agents** (`cloudPcAgentPool`).
 

@@ -1,42 +1,21 @@
 # Presenting guide
 
-This page is for normal presenting after the environment is already installed. The presenter does not need Git, Node, Python, Azure admin access, or a developer checkout.
+This page is for normal presenting after the environment is already installed. The presenter
+needs only a browser: no Git, Node, Python, Azure admin access, developer checkout or extra
+tool.
 
 ## Who does what
 
 | Person | Needs |
 | --- | --- |
 | Presenter | Zava web address, presenting account, normal browser window. |
-| Environment operator | The Foundry demo prep package, Azure CLI sign-ins for read-only checks, and the filled-in prep config. |
-
-## Get the Foundry prep package without a checkout
-
-A maintainer builds the ZIP from a checkout:
-
-```powershell
-pwsh -File .\scripts\Build-FoundryDemoPrepPackage.ps1
-```
-
-The ZIP is written under `deploy\foundry-demo-prep\` as `zava-foundry-demo-prep-<version>.zip`. The maintainer gives that ZIP plus the environment-specific `foundry-demo.config.json` to the environment operator through the team's normal private file-sharing channel. Do not commit the filled-in config.
-
-The operator extracts the ZIP anywhere on a Windows machine and starts with `START-HERE.txt` inside the package. The package needs no repository checkout, Git, Node, or Python.
-
-The maintainer fills or supplies `foundry-demo.config.json` from the package template:
-
-| Template value | What to put there |
-| --- | --- |
-| `zavaUrl` | Static Web App root URL, for example `https://<your-static-web-app>.azurestaticapps.net`. |
-| `relayUrl` | Function app relay URL ending in `/api/foundry-claims`. |
-| `foundryAgentUrl` | Foundry hosted agent management URL ending in `/agents/<agent-name>?api-version=v1`. |
-| `cloudPcPoolId` | Windows 365 for Agents Cloud PC pool ID. |
-| `tenantId` | Microsoft Entra tenant ID, used only for sign-in hints. |
-| `expectedFoundryVersion` | Optional hosted version ID the operator expects to be active. Leave blank if the operator should only report the active version. |
-| `poolAzureConfigDir` / `foundryAzureConfigDir` | Optional separate Azure CLI profile folders if the pool and Foundry checks use different sign-ins. Leave blank to use the normal Azure CLI sign-in. |
+| Environment owner | Access to the admin portals named below, for the checks a presenter cannot do. |
+| Operator (optional) | Only for the [optional advanced checks](#optional-advanced-checks-for-the-environment-operator). |
 
 ## Day before
 
 1. Run one complete rehearsal only if you can leave enough reset time afterward.
-2. Confirm both Cloud PC pools are healthy.
+2. Confirm both Cloud PC pools are healthy (see the checks under "30 minutes before").
 3. Confirm the Claims app is still installed on pool Cloud PCs.
 4. Confirm the presenter can open Zava and sign in.
 5. Confirm the MCS agent is published.
@@ -46,28 +25,28 @@ The maintainer fills or supplies `foundry-demo.config.json` from the package tem
 
 ## 30 minutes before
 
-Environment operator for Foundry:
+Presenter, in the browser:
 
-```powershell
-.\Prepare-FoundryDemo.cmd -WaitForCloudPcMinutes 20
-```
+1. Open `https://<zava-site>/workspace` in the normal browser profile you will present from and
+   sign in.
+2. Simulate inbound call -> **Answer** -> **Transfer**, look at the two agent cards, then close
+   the transfer list without choosing an agent and reset the demo.
+3. If the environment has the Cloud PC availability check turned on (install step 6.2a), the
+   Foundry card is enabled only when the Foundry pool reports a free Cloud PC. **No Cloud PC
+   available yet.** means wait; it re-enables by itself. Without that check, the card does not
+   show availability; use the owner's check below.
 
-This checks that Zava opens, wakes the relay, reads the active Foundry version, and checks whether a Cloud PC is free. It does not start a transfer, file a claim, call the Foundry agent, or take a Cloud PC.
+Environment owner, optional checks in the admin portals:
 
-MCS checks:
-
-1. Open Copilot Studio and confirm the agent's latest changes are published.
-2. Open Power Automate and confirm the Dataverse trigger flow is **On**.
-3. Open the MCS Cloud PC pool/machine group view and confirm capacity is available.
-4. Confirm the Function app settings still point to the correct Dataverse environment and `CUA_AGENT_BOTID`.
+1. **Foundry pool:** in the Intune admin center, open the Foundry provisioning policy (agents)
+   and look at **Available sessions** under **Session Usage**.
+2. **MCS:** in Copilot Studio, confirm the agent's latest changes are published; in Power
+   Automate, confirm the Dataverse trigger flow is **On**; under **Monitor > Machines > Machine
+   groups**, open the MCS Cloud PC pool and confirm capacity is available.
+3. Confirm the Function app settings still point to the correct Dataverse environment and
+   `CUA_AGENT_BOTID`.
 
 ## 2-5 minutes before
-
-Environment operator for Foundry:
-
-```powershell
-.\Prepare-FoundryDemo.cmd
-```
 
 Presenter:
 
@@ -80,6 +59,41 @@ Presenter:
 7. Reset the demo.
 
 Do **not** run a warm-up claim right before presenting. In a one-PC Foundry pool, a warm-up can leave the only Cloud PC resetting for 15-18 minutes.
+
+## Optional advanced checks for the environment operator
+
+Not needed for normal presenting. An existing Foundry demo prep tool can run read-only checks
+from a Windows computer without a checkout: it checks that Zava opens, wakes the relay, reads
+the active Foundry version and checks whether a Cloud PC is free. It does not start a transfer,
+file a claim, call the Foundry agent or take a Cloud PC. See
+[`deploy\foundry-demo-prep\README.md`](../../deploy/foundry-demo-prep/README.md).
+
+- **Getting it:** a maintainer builds the ZIP from a checkout with
+  `pwsh -File .\scripts\Build-FoundryDemoPrepPackage.ps1` (written under
+  `deploy\foundry-demo-prep\`) and shares it, with the environment's `foundry-demo.config.json`,
+  through the team's normal private file-sharing channel. Do not commit the filled-in config.
+  The operator extracts it anywhere and starts with `START-HERE.txt`.
+- **Sign-ins:** two read-only Azure CLI sign-ins (Foundry User on the project; for the pool
+  check, an app sign-in with the Microsoft Graph application permission `CloudPC.Read.All`).
+  The app sign-in is a limit of this tool, which gets its Graph token through the Azure CLI;
+  Microsoft Graph itself also accepts a person's delegated `CloudPC.Read.All`
+  ([prerequisites, section 0.2](01-prerequisites.md#microsoft-entra-id)). Without these
+  sign-ins, run `.\Prepare-FoundryDemo.cmd -SkipAzureChecks`, which checks only the Zava page
+  and wakes the relay.
+- **When:** about 30 minutes before, `.\Prepare-FoundryDemo.cmd -WaitForCloudPcMinutes 20`;
+  2-5 minutes before, `.\Prepare-FoundryDemo.cmd`.
+
+Values in `foundry-demo.config.json` (from the package template):
+
+| Template value | What to put there |
+| --- | --- |
+| `zavaUrl` | Static Web App root URL, for example `https://<your-static-web-app>.azurestaticapps.net`. |
+| `relayUrl` | Function app relay URL ending in `/api/foundry-claims`. |
+| `foundryAgentUrl` | Foundry hosted agent management URL ending in `/agents/<agent-name>?api-version=v1`. |
+| `cloudPcPoolId` | Windows 365 for Agents Cloud PC pool ID. |
+| `tenantId` | Microsoft Entra tenant ID, used only for sign-in hints. |
+| `expectedFoundryVersion` | Optional hosted version ID the operator expects to be active. Leave blank if the operator should only report the active version. |
+| `poolAzureConfigDir` / `foundryAzureConfigDir` | Optional separate Azure CLI profile folders if the pool and Foundry checks use different sign-ins. Leave blank to use the normal Azure CLI sign-in. |
 
 ## What the audience should see
 
@@ -101,7 +115,7 @@ Do **not** run a warm-up claim right before presenting. In a one-PC Foundry pool
 
 ## If something is not ready
 
-- **Foundry prep says still preparing:** wait, or use the backup video. Do not start a test transfer.
+- **Foundry card says No Cloud PC available yet** (or the optional prep tool says still preparing): wait, or use the backup video. Do not start a test transfer.
 - **MCS flow is off:** turn it on before the call, then use a fresh test only if there is enough time.
 - **MCS agent has unpublished changes:** publish before the call.
 - **Zava says reconnect Microsoft sign-in:** reconnect before the call.

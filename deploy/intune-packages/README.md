@@ -40,8 +40,12 @@ Get-FileHash .\deploy\intune-packages\*.intunewin -Algorithm SHA256
 
 Add `-DeviceCode` to authenticate without launching a local browser. The script
 prints a URL and a short code; open them on **any other device** (phone/laptop),
-sign in as the admin, and the workstation picks up the token automatically. This
-is the recommended path for headless/locked-down or Cloud PC admin hosts.
+sign in as the admin, and the workstation picks up the token automatically.
+Device code sign-in is subject to your tenant's Conditional Access, and Microsoft
+recommends blocking it except in documented cases
+([authentication flow policies](https://learn.microsoft.com/entra/identity/conditional-access/policy-block-authentication-flows#device-code-flow-policies)).
+Use it only where your tenant allows it; if it is blocked, sign in with a browser
+on a device that meets your policies.
 
 ```powershell
 .\scripts\Deploy-DemoEnvironment.ps1 -TenantId <your-tenant-id> `

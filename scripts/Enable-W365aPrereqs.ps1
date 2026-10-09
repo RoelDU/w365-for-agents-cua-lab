@@ -41,7 +41,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$TenantId,
 
-    # Use device-code sign-in (for a headless admin box / Conditional Access).
+    # Device-code sign-in: an alternative sign-in screen for a computer without a usable
+    # browser. Subject to the tenant's Conditional Access; use only where policy allows it.
     [switch]$DeviceCode,
 
     # Also create the dynamic device group that captures the pool's Cloud PCs.

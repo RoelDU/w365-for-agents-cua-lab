@@ -18,10 +18,13 @@ administrator and kept out of this repository (git-ignored, never packaged).
 
 ## Who uses it
 
-- **Environment operator:** runs it about 30 minutes before a demo and again 2-5 minutes
-  before. Needs Windows PowerShell 5.1 or PowerShell 7, the Azure CLI and two read-only
-  sign-ins (Foundry User on the Foundry project; an app sign-in with Microsoft Graph
-  `CloudPC.Read.All` for the pool). Details in `START-HERE.txt`.
+- **Environment operator (optional):** runs it about 30 minutes before a demo and again 2-5
+  minutes before. Needs Windows PowerShell 5.1 or PowerShell 7, the Azure CLI and two read-only
+  sign-ins (Foundry User on the Foundry project; for the pool check, an app sign-in with
+  Microsoft Graph `CloudPC.Read.All`). The app sign-in is a limit of this tool, which gets its
+  Graph token through the Azure CLI; Microsoft Graph itself also accepts a person's delegated
+  `CloudPC.Read.All`. Without these sign-ins, run it with `-SkipAzureChecks`. Details in
+  `START-HERE.txt`.
 - **Presenter:** does not need this package. Open the Zava address, sign in with the
   presenting account and do the browser check in
   [presenting guide](../../docs/install/presenting.md).
