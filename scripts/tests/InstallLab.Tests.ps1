@@ -97,7 +97,7 @@ Describe 'Guided setup: the whole journey from a fresh copy (both paths)' {
     It 'second run resumes, keeps the Foundry order, asks before consent and turn-on, and finishes ready' {
         $F.Bot = $true; $F.Flow = $true; $F.Pool = $true
         $F.Prompts.Clear()
-        Set-FakeAnswers @('yes', 'yes', 'yes')
+        Set-FakeAnswers @('yes', 'yes', 'yes', 'yes')
         $all = @(Invoke-LabSetup -StatePath $statePath 6>&1)
         $r = @($all | Where-Object { $_.PSObject.Properties['Status'] })[-1]
         $text = ($all | Where-Object { -not $_.PSObject.Properties['Status'] } | Out-String)
@@ -107,6 +107,12 @@ Describe 'Guided setup: the whole journey from a fresh copy (both paths)' {
         $text | Should Not Match 'every step was read back'
         $F.Answers.Count | Should Be 0
         @($F.Prompts | Where-Object { $_ -like '*tenant-wide consent*' }).Count | Should Be 1
+        @($F.Prompts | Where-Object { $_ -like '*Publish the agent?*' }).Count | Should Be 1
+        @($F.PublishCalls).Count | Should Be 1
+        $F.Policies.ContainsKey('Zava Contact Center') | Should Be $false
+        @($F.WebLinkRuns | ForEach-Object { $_.CcaasWebLinkName }) -join ',' | Should Match '^Zava Contact Center - zava-ccaas-[0-9a-f]{6}$'
+        $region = Get-Content -Raw (Join-Path $root 'apps\ccaas-agent-desktop\public\region-config.json') | ConvertFrom-Json
+        $region.activeRegion | Should Be $F.Settings.CUA_REGION
         @($F.Prompts | Where-Object { $_ -like '*Turn the Foundry agent on*' }).Count | Should Be 1
 
         $order = @($F.Scripts | ForEach-Object { if ($_.Path -like '*Deploy-FoundryAgent.ps1') { 'deploy:' + ((@($_.Args.Keys | Where-Object { $_ -in 'BuildImage', 'DeployVersion', 'ConfigureEndpoint' }) | Sort-Object) -join '+') } elseif ($_.Path -like '*Set-FoundryAgentIdentity.ps1' -and $_.Args.Apply) { 'identity-apply' } })
@@ -362,6 +368,297 @@ Describe 'Guided setup: failure, missing permission and existing resources' {
         }
         @(Get-LabStages (New-ReadyChoices 'mcs') | Where-Object { $_.Id -like 'foundry-*' }).Count | Should Be 0
         @(Get-LabStages (New-ReadyChoices 'foundry') | Where-Object { $_.Id -like 'mcs-*' -or $_.Id -eq 'tenant-prep' }).Count | Should Be 0
+    }
+}
+
+Describe 'Region contract between Zava and the handoff service (QA S1)' {
+    . (Join-Path $here 'LabFakes.ps1')
+    $root = New-LabCopy
+    foreach ($p in $labParts) { . (Join-Path $root "scripts\lab\$p.ps1") }
+    . (Join-Path $here 'LabFakes.ps1')
+    $global:LabTestCopy3 = $root
+    AfterAll { if ($global:LabTestCopy3) { Remove-Item -Recurse -Force -LiteralPath $global:LabTestCopy3 -ErrorAction SilentlyContinue } }
+    $harness = Join-Path $here 'RegionContract.mjs'
+
+    foreach ($backends in 'mcs', 'both') {
+        It "a fresh $backends install sends a region the real cuaRunStart handler accepts" {
+            Reset-LabFake
+            $s = New-ReadyChoices $backends
+            $s.found = @{ zavaClientId = 'zava-client-id'; zavaUrl = 'https://calm-sea-1.azurestaticapps.net'; handoffBaseUrl = 'https://zava-handoff-x.azurewebsites.net/api'; mcsBotId = 'bot-1'; invocationsUrl = 'https://x/invocations' }
+            $pub = Join-Path $root "pub-$backends"; New-Item -ItemType Directory -Force -Path $pub | Out-Null
+            Sync-LabZavaRuntimeFiles -State $s -PublicDir $pub -BackupDir $root 6>$null
+            $settingsFile = Join-Path $root "settings-$backends.json"
+            (Get-LabDesiredSettings $s) | ConvertTo-Json | Set-Content -LiteralPath $settingsFile -Encoding utf8
+            $ok = (& node $harness $repo (Join-Path $pub 'region-config.json') $settingsFile) | ConvertFrom-Json
+            $ok.regionId | Should Be 'primary'
+            $ok.status | Should Be 202
+            # Without the generated file the same service settings refuse the transfer, as QA found.
+            $bad = (& node $harness $repo '' $settingsFile) | ConvertFrom-Json
+            $bad.status | Should Be 409
+            $bad.code | Should Be 'REGION_MISMATCH'
+        }
+    }
+
+    It 'readiness names a missing, ignored or different region instead of only checking the file exists' {
+        $base = 'https://zava-handoff-x.azurewebsites.net/api'
+        (Get-LabRegionProblem $null 'primary' $base) | Should Match 'REGION_MISMATCH'
+        $noDirectLine = [pscustomobject]@{ activeRegion = 'primary'; regions = @([pscustomobject]@{ id = 'primary'; cuaRunBaseUrl = $base }) }
+        (Get-LabRegionProblem $noDirectLine 'primary' $base) | Should Match 'no usable region-config.json'
+        $other = [pscustomobject]@{ activeRegion = 'au'; regions = @([pscustomobject]@{ id = 'au'; directLineTokenUrl = 'x'; cuaRunBaseUrl = $base }) }
+        (Get-LabRegionProblem $other 'primary' $base) | Should Match "selects region 'au'"
+        $s = New-ReadyChoices 'mcs'; $s.found = @{ handoffBaseUrl = $base }
+        (Get-LabRegionProblem ((Get-LabRegionConfig $s) | ConvertTo-Json -Depth 5 | ConvertFrom-Json) 'primary' $base) | Should BeNullOrEmpty
+    }
+
+    It 'asks before replacing a different region-config.json and keeps a copy' {
+        Reset-LabFake
+        $s = New-ReadyChoices 'mcs'
+        $s.found = @{ zavaClientId = 'zava-client-id'; zavaUrl = 'https://calm-sea-1.azurestaticapps.net'; handoffBaseUrl = 'https://h/api' }
+        $pub = Join-Path $root 'pub-region'; New-Item -ItemType Directory -Force -Path $pub | Out-Null
+        Set-Content -LiteralPath (Join-Path $pub 'region-config.json') -Value '{"activeRegion":"au","regions":[{"id":"au","directLineTokenUrl":"x","cuaRunBaseUrl":"https://other/api"}]}'
+        Set-FakeAnswers @('no')
+        $err = $null; try { Sync-LabZavaRuntimeFiles -State $s -PublicDir $pub -BackupDir $root 6>$null } catch { $err = $_.Exception.Message }
+        $err | Should Match 'existing region-config.json was kept'
+        (Get-Content -Raw (Join-Path $pub 'region-config.json')) | Should Match 'https://other/api'
+        Set-FakeAnswers @('yes')
+        Sync-LabZavaRuntimeFiles -State $s -PublicDir $pub -BackupDir $root 6>$null
+        (Get-Content -Raw (Join-Path $pub 'region-config.json') | ConvertFrom-Json).activeRegion | Should Be 'primary'
+        (Get-Content -Raw (Join-Path $root 'region-config.previous.local.json')) | Should Match 'https://other/api'
+    }
+}
+
+Describe 'Presenter policy belongs to this installation (QA S2)' {
+    . (Join-Path $here 'LabFakes.ps1')
+    $root = New-LabCopy
+    foreach ($p in $labParts) { . (Join-Path $root "scripts\lab\$p.ps1") }
+    . (Join-Path $here 'LabFakes.ps1')
+    $global:LabTestCopy4 = $root
+    AfterAll { if ($global:LabTestCopy4) { Remove-Item -Recurse -Force -LiteralPath $global:LabTestCopy4 -ErrorAction SilentlyContinue } }
+
+    function New-PresenterCtx {
+        Reset-LabFake
+        $F.Groups['Zava-Demo-Agent-Users'] = 'g-presenters'
+        $s = New-ReadyChoices 'foundry'
+        $s.found = @{ zavaUrl = 'https://calm-sea-1.azurestaticapps.net' }
+        return @{ State = $s; Paths = (Get-LabPaths -StatePath (Join-Path $root 'scripts\p.local.json')); Preview = $false; DeviceCode = $false; RanThisRun = @{}; Earlier = (New-Object System.Collections.Generic.List[string]) }
+    }
+    $name = 'Zava Contact Center - zava-ccaas-x'
+
+    It 'uses a policy name of its own, not the shared Zava Contact Center policy' {
+        $ctx = New-PresenterCtx
+        (Get-LabPresenterPolicyName $ctx.State) | Should Be $name
+    }
+
+    It 'creates the policy when none has its name, and then reads it back' {
+        $ctx = New-PresenterCtx
+        $stage = Get-Stage $ctx.State 'presenter-icon'
+        (& $stage.Check $ctx).Done | Should Be $false
+        & $stage.Apply $ctx 6>$null
+        @($F.WebLinkRuns).Count | Should Be 1
+        $F.WebLinkRuns[0].CcaasWebLinkName | Should Be $name
+        $res = & $stage.Check $ctx
+        $res.Done | Should Be $true
+        $res.PSObject.Properties['Earlier'] | Should BeNullOrEmpty
+    }
+
+    It 'leaves an identical existing policy alone' {
+        $ctx = New-PresenterCtx
+        $F.Policies[$name] = @{ Url = 'https://calm-sea-1.azurestaticapps.net/'; Targets = @('g-presenters') }
+        (& (Get-Stage $ctx.State 'presenter-icon').Check $ctx).Done | Should Be $true
+        @($F.WebLinkRuns).Count | Should Be 0
+    }
+
+    It 'never replaces an existing policy with another address or other assignments' {
+        $ctx = New-PresenterCtx
+        $F.Policies[$name] = @{ Url = 'https://other-lab.azurestaticapps.net/'; Targets = @('g-presenters', 'g-other-lab') }
+        $stage = Get-Stage $ctx.State 'presenter-icon'
+        $res = & $stage.Check $ctx
+        $res.Done | Should Be $false
+        $res.Detail | Should Match 'installs https://other-lab.azurestaticapps.net/ instead of'
+        $res.Detail | Should Match 'group:g-other-lab'
+        $err = $null; try { & $stage.Apply $ctx 6>$null } catch { $err = $_.Exception.Message }
+        $err | Should Match 'does not change or replace it'
+        @($F.WebLinkRuns).Count | Should Be 0
+        $F.Policies[$name].Targets -join ',' | Should Be 'g-presenters,g-other-lab'
+    }
+
+    It 'does not run the policy helper when it cannot read the existing policies' {
+        $ctx = New-PresenterCtx
+        $F.DenyIntuneRead = $true
+        $err = $null; try { & (Get-Stage $ctx.State 'presenter-icon').Apply $ctx 6>$null } catch { $err = $_.Exception.Message }
+        $err | Should Match 'must read the existing Intune policies'
+        @($F.WebLinkRuns).Count | Should Be 0
+    }
+}
+
+Describe 'Copilot Studio publication and authentication (QA S3, native history)' {
+    . (Join-Path $here 'LabFakes.ps1')
+    $root = New-LabCopy
+    foreach ($p in $labParts) { . (Join-Path $root "scripts\lab\$p.ps1") }
+    . (Join-Path $here 'LabFakes.ps1')
+    $global:LabTestCopy5 = $root
+    AfterAll { if ($global:LabTestCopy5) { Remove-Item -Recurse -Force -LiteralPath $global:LabTestCopy5 -ErrorAction SilentlyContinue } }
+
+    function New-McsCtx {
+        Reset-LabFake
+        $F.Bot = $true
+        $s = New-ReadyChoices 'mcs'
+        $s.found = @{ mcsBotSchema = 'crcce_zava'; mcsBotId = 'bot-1' }
+        return @{ State = $s; Paths = (Get-LabPaths -StatePath (Join-Path $root 'scripts\m.local.json')); Preview = $false; DeviceCode = $false; RanThisRun = @{} }
+    }
+    function Get-Writes { @($F.Calls | Where-Object { $_ -like 'dataverse POST*' -or $_ -like 'dataverse PATCH*' }) }
+
+    It 'publishes without rewriting the texts when they match but the agent is not published' {
+        $ctx = New-McsCtx; $F.Instructions = $true
+        $stage = Get-Stage $ctx.State 'mcs-instructions'
+        (& $stage.Check $ctx).Detail | Should Match 'never been published'
+        Set-FakeAnswers @('yes')
+        & $stage.Apply $ctx 6>$null
+        @($F.PublishCalls).Count | Should Be 1
+        $F.PublishCalls[0] | Should Match '--publish-only'
+        (& $stage.Check $ctx).Done | Should Be $true
+    }
+
+    It 'retries a failed publish on resume without writing the texts again' {
+        $ctx = New-McsCtx; $F.FailPublishOnce = $true
+        $stage = Get-Stage $ctx.State 'mcs-instructions'
+        Set-FakeAnswers @('yes')
+        $err = $null; try { & $stage.Apply $ctx 6>$null } catch { $err = $_.Exception.Message }
+        $err | Should Match 'PvaPublish failed'
+        $F.Instructions | Should Be $true
+        $res = & $stage.Check $ctx
+        $res.Done | Should Be $false
+        $res.Detail | Should Not Match 'instructions not yet as documented'
+        Set-FakeAnswers @('yes')
+        & $stage.Apply $ctx 6>$null
+        @($F.PublishCalls).Count | Should Be 1
+        $F.PublishCalls[0] | Should Match '--publish-only'
+        (& $stage.Check $ctx).Done | Should Be $true
+    }
+
+    It 'does not publish again when the published version is current' {
+        $ctx = New-McsCtx; $F.Instructions = $true; $F.Published = $true; $F.PublishedAt = '2026-10-09T00:00:00Z'
+        (& (Get-Stage $ctx.State 'mcs-instructions').Check $ctx).Done | Should Be $true
+        @($F.PublishCalls).Count | Should Be 0
+    }
+
+    It 'does not publish without a yes' {
+        $ctx = New-McsCtx; $F.Instructions = $true
+        Set-FakeAnswers @('no')
+        $err = $null; try { & (Get-Stage $ctx.State 'mcs-instructions').Apply $ctx 6>$null } catch { $err = $_.Exception.Message }
+        $err | Should Match 'chose not to publish'
+        @($F.PublishCalls).Count | Should Be 0
+    }
+
+    It 'names the wrong authentication mode with the exact fix, and does not change it' {
+        $ctx = New-McsCtx; $F.AuthMode = 3
+        $res = & (Get-Stage $ctx.State 'mcs-agent').Check $ctx
+        $res.Done | Should Be $false
+        $res.Detail | Should Match "uses 'Authenticate manually'"
+        $res.Detail | Should Match 'Settings > Security > Authentication, choose Authenticate with Microsoft'
+        @(Get-Writes).Count | Should Be 0
+    }
+
+    It 'after the authentication is corrected, requires a publish newer than the correction' {
+        $ctx = New-McsCtx; $F.AuthMode = 3; $F.Instructions = $true; $F.Published = $true; $F.PublishedAt = '2026-10-01T00:00:00Z'
+        $agent = Get-Stage $ctx.State 'mcs-agent'; $publishStage = Get-Stage $ctx.State 'mcs-instructions'
+        (& $agent.Check $ctx).Done | Should Be $false
+        $F.AuthMode = 2
+        (& $agent.Check $ctx).Done | Should Be $true
+        $ctx.State.found.mcsAuthCorrectedAt | Should Not BeNullOrEmpty
+        (& $publishStage.Check $ctx).Detail | Should Match 'not published'
+        Set-FakeAnswers @('yes')
+        & $publishStage.Apply $ctx 6>$null
+        $F.PublishCalls[0] | Should Match '--publish-only --published-after'
+        (& $publishStage.Check $ctx).Done | Should Be $true
+        @(Get-Writes).Count | Should Be 0
+    }
+
+    It 'readiness fails while the agent does not use Authenticate with Microsoft' {
+        $ctx = New-McsCtx; $F.AuthMode = 3; $F.Instructions = $true; $F.Published = $true; $F.PublishedAt = '2026-10-09T00:00:00Z'; $F.Flow = $true
+        $ctx.State.found.zavaUrl = 'https://calm-sea-1.azurestaticapps.net'; $ctx.State.found.handoffBaseUrl = 'https://h/api'
+        $res = & (Get-Stage $ctx.State 'readiness').Check $ctx
+        $res.Done | Should Be $false
+        $res.Detail | Should Match "uses 'Authenticate manually', not Authenticate with Microsoft"
+    }
+
+    It 'still requires the publish after the correction when setup is resumed from its saved state' {
+        $ctx = New-McsCtx; $F.AuthMode = 3; $F.Instructions = $true; $F.Published = $true; $F.PublishedAt = '2026-10-01T00:00:00Z'
+        $agent = Get-Stage $ctx.State 'mcs-agent'
+        & $agent.Check $ctx | Out-Null
+        $F.AuthMode = 2
+        & $agent.Check $ctx | Out-Null
+        # The person declines the publish, and setup stops; the next run reloads the saved state.
+        Set-FakeAnswers @('no')
+        try { & (Get-Stage $ctx.State 'mcs-instructions').Apply $ctx 6>$null } catch { }
+        $statePath = Join-Path $root 'scripts\resume.local.json'
+        Save-LabState $ctx.State $statePath
+        $ctx.State = Read-LabState $statePath
+        $publishStage = Get-Stage $ctx.State 'mcs-instructions'
+        (& $publishStage.Check $ctx).Done | Should Be $false
+        Set-FakeAnswers @('yes')
+        & $publishStage.Apply $ctx 6>$null
+        $F.PublishCalls[0] | Should Match '--published-after \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+        (& $publishStage.Check $ctx).Done | Should Be $true
+    }
+}
+
+Describe 'Completion records belong to their targets (QA S4)' {
+    . (Join-Path $here 'LabFakes.ps1')
+    $root = New-LabCopy
+    foreach ($p in $labParts) { . (Join-Path $root "scripts\lab\$p.ps1") }
+    . (Join-Path $here 'LabFakes.ps1')
+    $global:LabTestCopy6 = $root
+    AfterAll { if ($global:LabTestCopy6) { Remove-Item -Recurse -Force -LiteralPath $global:LabTestCopy6 -ErrorAction SilentlyContinue } }
+
+    function New-TargetCtx([string]$Backends = 'both') {
+        Reset-LabFake
+        $F.DenyIntuneRead = $true
+        $F.Groups['Zava W365A Cloud PC Pools'] = 'g-old-pool'; $F.Groups['Zava-Demo-Agent-Users'] = 'g-old-presenters'
+        $F.Groups['New Pool Group'] = 'g-new-pool'; $F.Groups['New Presenters'] = 'g-new-presenters'
+        $s = New-ReadyChoices $Backends
+        $s.found = @{ zavaUrl = 'https://calm-sea-1.azurestaticapps.net' }
+        return @{ State = $s; Paths = (Get-LabPaths -StatePath (Join-Path $root 'scripts\t.local.json')); Preview = $false; DeviceCode = $false; RanThisRun = @{} }
+    }
+
+    It 'does not accept an old group''s Intune record for a new device group' {
+        $ctx = New-TargetCtx
+        Add-LabRun $ctx.State 'mcs-claims-app' 'old'
+        $stage = Get-Stage $ctx.State 'mcs-claims-app'
+        $before = & $stage.Check $ctx
+        $before.Done | Should Be $true
+        $before.Earlier | Should Be $true
+        $ctx.State.choices.mcsDeviceGroup = 'New Pool Group'
+        (& $stage.Check $ctx).Done | Should Be $false
+    }
+
+    It 'does not accept an old presenter record for a new presenter group' {
+        $ctx = New-TargetCtx
+        Add-LabRun $ctx.State 'presenter-icon' 'old'
+        $stage = Get-Stage $ctx.State 'presenter-icon'
+        (& $stage.Check $ctx).Earlier | Should Be $true
+        $ctx.State.choices.presenterGroup = 'New Presenters'
+        (& $stage.Check $ctx).Done | Should Be $false
+    }
+
+    It 'forgets only the records whose target changed' {
+        $ctx = New-TargetCtx
+        foreach ($id in 'tenant-prep', 'mcs-claims-app', 'mcs-shortcut', 'foundry-claims-app', 'presenter-icon') { Add-LabRun $ctx.State $id 'x' }
+        $ctx.State.runs['legacy'] = @{ atUtc = 'x'; note = 'no target' }
+        $ctx.State.choices.mcsDeviceGroup = 'New Pool Group'
+        $removed = @(Remove-LabStaleRuns $ctx.State | Sort-Object)
+        ($removed -join ',') | Should Be 'legacy,mcs-claims-app,mcs-shortcut,tenant-prep'
+        @($ctx.State.runs.Keys | Sort-Object) -join ',' | Should Be 'foundry-claims-app,presenter-icon'
+    }
+
+    It 'keeps an older record without a target only when it names the same group' {
+        $ctx = New-TargetCtx
+        $ctx.State.runs['mcs-claims-app'] = @{ atUtc = '2026-10-08T00:00:00Z'; note = 'Zava W365A Cloud PC Pools' }
+        $ctx.State.runs['tenant-prep'] = @{ atUtc = '2026-10-08T00:00:00Z'; note = 'Enable-W365aPrereqs.ps1 -CreateDynamicGroup' }
+        (& (Get-Stage $ctx.State 'mcs-claims-app').Check $ctx).Earlier | Should Be $true
+        (& (Get-Stage $ctx.State 'tenant-prep').Check $ctx).Done | Should Be $false
+        $ctx.State.choices.mcsDeviceGroup = 'New Pool Group'
+        (& (Get-Stage $ctx.State 'mcs-claims-app').Check $ctx).Done | Should Be $false
     }
 }
 

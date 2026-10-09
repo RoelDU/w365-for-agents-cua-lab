@@ -37,7 +37,8 @@ function Get-LabIntuneStageResult([hashtable]$Ctx, [string]$StageId, [string]$Ap
     if ($assigned -eq $false) { return (New-LabResult $false "$AppName is not assigned to $GroupName yet.") }
     # This sign-in may not read Intune apps.
     if ($Ctx.RanThisRun -and $Ctx.RanThisRun[$StageId]) { return (New-LabResult $true "Group $GroupName exists; the Intune helper confirmed the assignment during this run.") }
-    if ($Ctx.State.runs[$StageId]) { return (New-LabEarlierResult "Group $GroupName exists; the Intune assignment cannot be read with this sign-in. The Intune helper confirmed it on $($Ctx.State.runs[$StageId].atUtc).") }
+    $run = Get-LabRun $Ctx.State $StageId
+    if ($run) { return (New-LabEarlierResult "Group $GroupName exists; the Intune assignment cannot be read with this sign-in. The Intune helper confirmed this app for this group on $($run.atUtc).") }
     New-LabResult $false "Group $GroupName exists; the Claims app assignment is not confirmed yet."
 }
 
@@ -150,9 +151,42 @@ function Install-LabAppUser([hashtable]$State) {
 
 function Find-LabMcsAgent([hashtable]$State) {
     $name = $State.choices.mcsAgentName.Replace("'", "''")
-    $r = Invoke-LabDataverse -State $State -Path "bots?`$select=botid,name,schemaname,publishedon&`$filter=name eq '$name'"
+    $r = Invoke-LabDataverse -State $State -Path "bots?`$select=botid,name,schemaname,publishedon,authenticationmode&`$filter=name eq '$name'"
     if (-not $r.Ok) { throw "Could not read Copilot Studio agents: $($r.Message)" }
     return @($r.Json.value)
+}
+
+# Copilot Studio authentication modes (Dataverse bot.authenticationmode). This lab needs 2:
+# only "Authenticate with Microsoft" gives the native Activity history with the run's
+# explanations and screenshots, and Computer use does not run without authentication.
+$script:LabAuthIntegrated = 2
+$script:LabAuthLabels = @{ 0 = 'not set'; 1 = 'No authentication'; 2 = 'Authenticate with Microsoft'; 3 = 'Authenticate manually' }
+
+function Get-LabAuthLabel($Mode) {
+    $m = [int]$Mode
+    if ($script:LabAuthLabels.ContainsKey($m)) { return $script:LabAuthLabels[$m] }
+    return "another mode (code $m)"
+}
+
+function Get-LabMcsConfigReceipt([hashtable]$Ctx) {
+    # Read-only: the helper's dry run says whether the two texts are as documented and whether
+    # the agent has saved changes that are not published yet.
+    $a = @('scripts\mcs\publish_mcs_agent_config.py', '--org-url', $Ctx.State.choices.dataverseUrl, '--agent-schema', $Ctx.State.found.mcsBotSchema, '--dry-run')
+    if ($Ctx.State.found.mcsAuthCorrectedAt) { $a += @('--published-after', (ConvertTo-LabUtcText $Ctx.State.found.mcsAuthCorrectedAt)) }
+    $r = Invoke-LabPython -Python $Ctx.Paths.VenvPython -Arguments $a
+    if ($r.Code -ne 0) { throw "The configuration helper could not read the agent: $(Get-LabShortText $r.Text)" }
+    return ($r.Text.Substring($r.Text.IndexOf('{')) | ConvertFrom-Json)
+}
+
+function Get-LabMcsConfigProblems($Receipt) {
+    # What still keeps the published agent from being the documented, current configuration.
+    $problems = @()
+    $pending = @($Receipt.components.PSObject.Properties | Where-Object { $_.Value -ne 'already as documented' })
+    if ($pending.Count) { $problems += "instructions not yet as documented ($(($pending | ForEach-Object { $_.Name }) -join ', '))" }
+    $p = $Receipt.publication
+    if (-not $p.publishedon) { $problems += 'the agent has never been published' }
+    elseif ($p.unpublished_changes) { $problems += "the agent has saved changes that are not published (last change $($p.latest_change), last publish $($p.publishedon))" }
+    return $problems
 }
 
 function Get-LabMcsFlowCheck([hashtable]$State) {
@@ -186,7 +220,8 @@ function Get-LabMcsStages {
                 if ($rdp -eq $true) { return (New-LabResult $true 'Remote desktop sign-in is on and the group hides the consent prompt') }
                 if ($rdp -eq $false) { return (New-LabResult $false 'Remote desktop sign-in or the group''s consent setting is not in place yet.') }
                 if ($Ctx.RanThisRun -and $Ctx.RanThisRun['tenant-prep']) { return (New-LabResult $true 'Group exists; the tenant script confirmed the remote desktop settings during this run.') }
-                if ($Ctx.State.runs['tenant-prep']) { return (New-LabEarlierResult "Group exists; the remote desktop settings need a Global Administrator to read. The tenant script confirmed them on $($Ctx.State.runs['tenant-prep'].atUtc).") }
+                $run = Get-LabRun $Ctx.State 'tenant-prep'
+                if ($run) { return (New-LabEarlierResult "Group exists; the remote desktop settings need a Global Administrator to read. The tenant script confirmed them for this group on $($run.atUtc).") }
                 New-LabResult $false 'The group exists; the remote desktop settings have not been confirmed yet.'
             }
             Apply = {
@@ -316,7 +351,18 @@ function Get-LabMcsStages {
                 if (-not (@($comps.Json.value) | Where-Object { [string]$_.data -like '*InvokeComputerUsingAgentTaskAction*' })) { return (New-LabResult $false 'The agent exists but has no Computer use tool yet.') }
                 Set-LabFound $Ctx.State 'mcsBotId' $bot.botid
                 Set-LabFound $Ctx.State 'mcsBotSchema' $bot.schemaname
-                New-LabResult $true "$($bot.name) ($($bot.schemaname))"
+                # The saved (draft) authentication setting. Setup never changes it: an existing
+                # agent may be used by other people or channels.
+                if ([int]$bot.authenticationmode -ne $script:LabAuthIntegrated) {
+                    $Ctx.State.found.mcsAuthWrongSeen = $true
+                    return (New-LabResult $false ("The agent uses '$(Get-LabAuthLabel $bot.authenticationmode)'. This lab needs 'Authenticate with Microsoft' for Computer use and for the native Activity history. In Copilot Studio open the agent > Settings > Security > Authentication, choose Authenticate with Microsoft and Save. Setup asks before it publishes. Setup does not change this setting for you."))
+                }
+                if ($Ctx.State.found.mcsAuthWrongSeen) {
+                    # Corrected since setup last looked: a publish after this moment is required.
+                    $Ctx.State.found.Remove('mcsAuthWrongSeen')
+                    $Ctx.State.found.mcsAuthCorrectedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+                }
+                New-LabResult $true "$($bot.name) ($($bot.schemaname)), Authenticate with Microsoft"
             }
             Guide = {
                 param($Ctx)
@@ -325,7 +371,7 @@ function Get-LabMcsStages {
                     'An administrator must first have: turned on Computer use with Cloud PC for this environment (Power Platform admin center > Copilot > Settings > Computer Use), and allowed Anthropic models (prerequisites page, section 0.2).',
                     "1. Open https://copilotstudio.microsoft.com and switch to environment: $($c.ppEnvironmentName)",
                     "2. Create a new agent and name it exactly: $($c.mcsAgentName)",
-                    '3. In the agent''s settings: generative orchestration on; authentication "Authenticate with Microsoft" (the default). Computer use does not work without authentication.',
+                    '3. Settings > Generative AI: generative orchestration on. Settings > Security > Authentication: "Authenticate with Microsoft" (the default for a new agent). This lab needs exactly this mode: Computer use does not run without authentication, and the native Activity history with explanations and screenshots needs it.',
                     '4. Add a tool: Computer use. Under Machines choose Cloud PC pool and create a new pool. Leave Inputs empty. Type any placeholder in Instructions; setup replaces it. Save.',
                     '   The agent uses Claude Sonnet 4.6 and the Computer use tool Claude Sonnet 4.5 (docs\mcs-computer-use-instructions.md). Choose them if they are not already selected.',
                     '5. The pool takes about 30 minutes to provision. You can continue setup now.',
@@ -338,29 +384,37 @@ function Get-LabMcsStages {
     $stages.Add(@{
             Id = 'mcs-instructions'; When = 'mcs'; Kind = 'auto'
             Title = 'Write the agent instructions and publish'
-            Purpose = 'Applies the documented agent and Computer use instructions exactly (with backups), publishes, and reads them back.'
+            Purpose = 'Applies the documented agent and Computer use instructions exactly (with backups), and publishes the agent so the saved configuration is the one that runs. Saving in Copilot Studio is not enough: a transfer uses the last published version.'
             Who = 'You (System Customizer or System Administrator in the environment)'
-            Plan = { param($Ctx) 'Run scripts\mcs\publish_mcs_agent_config.py: a dry run first, then write the two documented texts and publish. Tool inputs stay empty.' }
+            Plan = { param($Ctx) 'Run scripts\mcs\publish_mcs_agent_config.py: a dry run first; then either write the two documented texts and publish, or, when the texts already match but saved changes are not published, publish only. Asks before publishing. Tool inputs stay empty.' }
             Check = {
                 param($Ctx)
                 if (-not $Ctx.State.found.mcsBotSchema) { return (New-LabResult $false 'Waiting for the agent.') }
-                $r = Invoke-LabPython -Python $Ctx.Paths.VenvPython -Arguments @('scripts\mcs\publish_mcs_agent_config.py', '--org-url', $Ctx.State.choices.dataverseUrl, '--agent-schema', $Ctx.State.found.mcsBotSchema, '--dry-run')
-                if ($r.Code -ne 0) { throw "The configuration helper could not read the agent: $(Get-LabShortText $r.Text)" }
-                $text = $r.Text.Substring($r.Text.IndexOf('{'))
-                $receipt = $text | ConvertFrom-Json
-                $pending = @($receipt.components.PSObject.Properties | Where-Object { $_.Value -ne 'already as documented' })
-                if ($pending.Count) { return (New-LabResult $false ("Not yet as documented: " + (($pending | ForEach-Object { $_.Name }) -join ', '))) }
-                $bot = @(Find-LabMcsAgent $Ctx.State) | Select-Object -First 1
-                if (-not $bot.publishedon) { return (New-LabResult $false 'The agent has not been published yet.') }
-                New-LabResult $true "Instructions as documented; published $($bot.publishedon)"
+                $receipt = Get-LabMcsConfigReceipt $Ctx
+                $problems = @(Get-LabMcsConfigProblems $receipt)
+                if ($problems.Count) { return (New-LabResult $false ("Not ready: " + ($problems -join '; ') + '.')) }
+                New-LabResult $true "Instructions as documented; published $($receipt.publication.publishedon) with no unpublished changes"
             }
             Apply = {
                 param($Ctx)
-                $r = Invoke-LabPython -Python $Ctx.Paths.VenvPython -Arguments @('scripts\mcs\publish_mcs_agent_config.py', '--org-url', $Ctx.State.choices.dataverseUrl, '--agent-schema', $Ctx.State.found.mcsBotSchema)
+                $receipt = Get-LabMcsConfigReceipt $Ctx
+                $pending = @($receipt.components.PSObject.Properties | Where-Object { $_.Value -ne 'already as documented' })
+                $p = $receipt.publication
+                if ($pending.Count) { Write-LabInfo "Setup writes the two documented texts (the current ones are backed up first) and then publishes the agent." }
+                else { Write-LabInfo 'The two texts already match the documentation. Setup only publishes; it changes no text.' }
+                if (-not $p.publishedon) { Write-LabWarn 'The agent has never been published. Publishing makes the configuration you created in Copilot Studio live, together with the documented instructions.' }
+                elseif ($p.unpublished_changes) { Write-LabWarn "The agent has saved changes that are not published (last change $($p.latest_change), last publish $($p.publishedon)). Publishing makes ALL saved changes live, including any made by other people in Copilot Studio. Check them first if you are not sure." }
+                if (-not (Confirm-Lab 'Publish the agent?')) { throw 'You chose not to publish. A transfer keeps using the last published version until the agent is published.' }
+                $a = @('scripts\mcs\publish_mcs_agent_config.py', '--org-url', $Ctx.State.choices.dataverseUrl, '--agent-schema', $Ctx.State.found.mcsBotSchema)
+                if (-not $pending.Count) {
+                    $a += '--publish-only'
+                    if ($Ctx.State.found.mcsAuthCorrectedAt) { $a += @('--published-after', (ConvertTo-LabUtcText $Ctx.State.found.mcsAuthCorrectedAt)) }
+                }
+                $r = Invoke-LabPython -Python $Ctx.Paths.VenvPython -Arguments $a
                 Write-Host $r.Text
-                if ($r.Code -ne 0) { throw "Applying the agent configuration failed: $(Get-LabShortText $r.Text)" }
+                if ($r.Code -ne 0) { throw "Applying or publishing the agent configuration failed: $(Get-LabShortText $r.Text)" }
             }
-            NextAction = 'Backups of the previous texts are in scripts\mcs\backups. Read the message above; a common cause is a missing System Customizer role.'
+            NextAction = 'Backups of the previous texts are in scripts\mcs\backups. Read the message above; a common cause is a missing System Customizer role. If the texts were saved but publishing failed, run setup again: it publishes without writing the texts again.'
         })
 
     $stages.Add(@{

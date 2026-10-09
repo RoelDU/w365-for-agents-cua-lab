@@ -143,6 +143,7 @@ function Select-LabChoices {
         staticWebApp   = "zava-ccaas-$sfx"
         signInAppName  = $script:LabDefaults.signInAppName
         presenterGroup = $script:LabDefaults.presenterGroup
+        presenterPolicyName = "Zava Contact Center - zava-ccaas-$sfx"
     }
     if (Test-LabUseMcs $State) {
         $names.mcsAgentName = $script:LabDefaults.mcsAgentName
@@ -213,6 +214,7 @@ function Show-LabDestination([hashtable]$State) {
         'Handoff service'  = "$($c.functionApp) (+ storage $($c.storageAccount), key vault $($c.keyVault))"
         'Zava web site'    = $c.staticWebApp
         'Zava sign-in app' = $c.signInAppName
+        'Presenter policy' = "$(Get-LabPresenterPolicyName $State) (Intune, for group $($c.presenterGroup))"
     }
     if (Test-LabUseMcs $State) {
         $rows['Power Platform'] = $(if ($c.ppEnvironmentName) { "$($c.ppEnvironmentName) ($($c.dataverseUrl))" } else { 'not chosen yet' })

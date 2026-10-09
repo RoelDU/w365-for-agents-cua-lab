@@ -173,3 +173,8 @@ pwsh -File .\scripts\Deploy-DemoEnvironment.ps1 `
 
 Run it again without `-WhatIf` after review, then add each presenter's user account to
 **Zava-Demo-Agent-Users**.
+
+Caution: if an Intune policy with the `-CcaasWebLinkName` name already exists, this script
+deletes it and creates it again with only this group, so any other assignments are lost. Use a
+name of your own for each installation (the guided setup uses
+`Zava Contact Center - <static web app name>` and never runs this over an existing policy).

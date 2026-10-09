@@ -20,7 +20,13 @@ Usage (from the repository root):
 
   --agent-schema   The agent's schema name, shown in Copilot Studio under Settings >
                    Advanced > Metadata (for example cr123_ZavaClaimsIntakeCUA).
-  --dry-run        Read and compare only; change nothing.
+  --dry-run        Read and compare only; change nothing. The output also says whether the
+                   agent has saved changes that are not published ("publication").
+  --publish-only   Write nothing; publish only if the texts already match the document and the
+                   agent has unpublished changes (for example when an earlier publish failed).
+                   Publishing makes every saved change live, not only these texts. A change to an
+                   agent setting such as authentication is not detected: pass
+                   --published-after <UTC time of that change> as well, or publish in Copilot Studio.
   --restore FILE   Write a saved backup back to its component and publish.
 
 Requires Python 3.10+, PyYAML (pip install pyyaml) and the Azure CLI signed in (az login)
@@ -188,19 +194,54 @@ def changed_fields(old: str, new: str) -> list[str]:
     return top
 
 
+def _when(value: str | None) -> datetime | None:
+    """An ISO 8601 time as a UTC datetime; refuses anything else instead of comparing text."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise SystemExit(f"Not an ISO 8601 time: {value!r}") from None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def publication_state(dv: Dataverse, bot: dict, published_after: str | None = None) -> dict:
+    """Whether the agent has saved changes that are not published yet.
+
+    A component saved after the last publish means the draft differs from what runs. An agent
+    setting changed outside components (for example authentication) is not visible here, so a
+    caller that saw such a change passes the time it saw it as published_after."""
+    rows = dv.call("GET", f"botcomponents?$select=modifiedon&$filter=_parentbotid_value eq {bot['botid']}")["value"]
+    changes = [t for t in (_when(r.get("modifiedon")) for r in rows) if t]
+    latest = max(changes, default=None)
+    published = _when(bot.get("publishedon"))
+    after = _when(published_after)
+    pending = published is None or (latest is not None and latest > published) or (after is not None and published < after)
+    return {"publishedon": bot.get("publishedon") or None,
+            "latest_change": latest.strftime("%Y-%m-%dT%H:%M:%SZ") if latest else None,
+            "unpublished_changes": pending}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--org-url", required=True)
     parser.add_argument("--agent-schema", required=True)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--restore", type=Path)
+    parser.add_argument("--publish-only", action="store_true",
+                        help="Publish without writing anything, only when the texts already match the document "
+                             "and the agent has unpublished changes (for example after a failed publish).")
+    parser.add_argument("--published-after", help="Treat a publish older than this UTC time (ISO 8601) as out of date.")
     parser.add_argument("--backup-dir", type=Path, default=ROOT / "scripts" / "mcs" / "backups")
     args = parser.parse_args()
+    if args.publish_only and args.restore:
+        raise SystemExit("--publish-only cannot be combined with --restore.")
 
     dv = Dataverse(args.org_url)
     bot, live = find(dv, args.agent_schema)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    receipt: dict = {"agent": bot["name"], "started": stamp, "dry_run": args.dry_run, "components": {}}
+    receipt: dict = {"agent": bot["name"], "started": stamp, "dry_run": args.dry_run, "components": {},
+                     "publication": publication_state(dv, bot, args.published_after)}
 
     if args.restore:
         saved = json.loads(args.restore.read_text(encoding="utf-8"))
@@ -217,6 +258,16 @@ def main() -> None:
 
     for kind, row, new in plans:
         receipt["components"][kind] = {"will_change": changed_fields(row["data"], new)}
+    if args.publish_only:
+        if plans:
+            raise SystemExit("--publish-only: the texts differ from the document; run without --publish-only to apply them.")
+        if args.dry_run or not receipt["publication"]["unpublished_changes"]:
+            receipt["published"] = "not needed" if not receipt["publication"]["unpublished_changes"] else "dry run"
+            print(json.dumps(receipt, indent=2))
+            return
+        receipt["published"] = publish(dv, bot)
+        print(json.dumps(receipt, indent=2))
+        return
     if args.dry_run or not plans:
         print(json.dumps(receipt, indent=2))
         return

@@ -105,14 +105,14 @@ function Get-LabIdentityPlan([hashtable]$Ctx, [switch]$Apply) {
 }
 
 function Invoke-LabGraphPs {
-    # Cloud PC pools are read with the Microsoft Graph PowerShell sign-in (CloudPC.Read.All);
-    # the Azure CLI token does not carry that permission.
-    param([Parameter(Mandatory)][string]$Uri, [Parameter(Mandatory)][string]$TenantId, [switch]$DeviceCode)
+    # Reads that the Azure CLI token cannot do (Cloud PC pools, Intune policies) use the Microsoft
+    # Graph PowerShell sign-in, with read-only scopes.
+    param([Parameter(Mandatory)][string]$Uri, [Parameter(Mandatory)][string]$TenantId, [string[]]$Scopes = @('CloudPC.Read.All'), [switch]$DeviceCode)
     Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
     $ctx = Get-MgContext
-    if (-not $ctx -or $ctx.TenantId -ne $TenantId -or @($ctx.Scopes) -notcontains 'CloudPC.Read.All') {
-        if ($DeviceCode) { Connect-MgGraph -TenantId $TenantId -Scopes 'CloudPC.Read.All' -UseDeviceAuthentication -NoWelcome | Out-Null }
-        else { Connect-MgGraph -TenantId $TenantId -Scopes 'CloudPC.Read.All' -NoWelcome | Out-Null }
+    if (-not $ctx -or $ctx.TenantId -ne $TenantId -or @($Scopes | Where-Object { @($ctx.Scopes) -notcontains $_ }).Count) {
+        if ($DeviceCode) { Connect-MgGraph -TenantId $TenantId -Scopes $Scopes -UseDeviceAuthentication -NoWelcome | Out-Null }
+        else { Connect-MgGraph -TenantId $TenantId -Scopes $Scopes -NoWelcome | Out-Null }
     }
     Invoke-MgGraphRequest -Method GET -Uri $Uri -OutputType PSObject
 }

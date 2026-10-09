@@ -141,7 +141,7 @@ Example `region-config.json`:
 }
 ```
 
-The supported live MCS progress path uses `cuaRunBaseUrl`. `directLineTokenUrl` is kept for the in-app stream and any region UI that still expects it.
+The supported live MCS progress path uses `cuaRunBaseUrl`. The region `id` that Zava selects (`activeRegion`) must equal the handoff service setting `CUA_REGION` (`primary` in 6.1); otherwise every Copilot Studio transfer is refused with `REGION_MISMATCH`. Zava ignores a region without a `directLineTokenUrl`, so the field must not be empty, but it belongs to the retired Direct Line path and is not used while `cuaRunBaseUrl` is set; the guided setup writes a deliberately non-working value there and generates this file for you.
 
 Example `entra-config.json`:
 

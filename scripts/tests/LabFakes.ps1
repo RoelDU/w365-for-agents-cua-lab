@@ -28,7 +28,7 @@ function Reset-LabFake {
         Answers = New-Object System.Collections.Generic.Queue[string]
         Prompts = New-Object System.Collections.Generic.List[string]
         Fn = $false; Code = $true; Swa = $false; App = $null; Sp = $false; Settings = @{}; Cors = @()
-        Groups = @{}; Intune = @{}; Table = $false; AppUser = $false; Bot = $false; Instructions = $false; Flow = $false
+        Groups = @{}; Intune = @{}; Table = $false; AppUser = $false; Bot = $false; Instructions = $false; Published = $false; PublishCalls = @(); AuthMode = 2; Flow = $false; Policies = @{}; DenyIntuneRead = $false; WebLinkRuns = @()
         Acc = $false; Proj = $false; Dep = $false; Acr = $false; Roles = @(); Digest = ''; Agent = $null; Identity = $false; Pool = $false
         Site = $null; Venv = $false; Deployed = @(); FailSwa = $false; DenyAppCreate = $false; ExistingSettings = @{}
     }
@@ -86,7 +86,22 @@ function az {
         'graph.microsoft.com/v1.0/domains' { return (Fake-Ok @{ value = @(@{ id = 'contoso.onmicrosoft.com'; isInitial = $true; isVerified = $true }) }) }
         'remoteDesktopSecurityConfiguration' { $global:LASTEXITCODE = 1; return 'ERROR: Forbidden (403): Authorization_RequestDenied' }
         '^ad group list' { $n = ([regex]::Match($j, "displayName eq '([^']+)'")).Groups[1].Value; if ($F.Groups.ContainsKey($n)) { return (Fake-Ok @(@{ id = $F.Groups[$n]; displayName = $n })) } else { return (Fake-Ok @()) } }
+        'configurationPolicies\?' {
+            if ($F.DenyIntuneRead) { $global:LASTEXITCODE = 1; return 'ERROR: Forbidden (403): Authorization_RequestDenied' }
+            $n = ([regex]::Match($j, "name eq '([^']+)'")).Groups[1].Value
+            return (Fake-Ok @{ value = @($F.Policies.Keys | Where-Object { $_ -eq $n } | ForEach-Object { @{ id = "pol-$_"; name = $_ } }) })
+        }
+        'configurationPolicies/pol-(.+)/settings' {
+            $p = $F.Policies[$Matches[1]]
+            $list = ConvertTo-Json -InputObject @(@{ url = $p.Url; create_desktop_shortcut = $true; default_launch_container = 'window' }) -Compress
+            return (Fake-Ok @{ value = @(@{ settingInstance = @{ choiceSettingValue = @{ children = @(@{ simpleSettingCollectionValue = @(@{ value = $list }) }) } } }) })
+        }
+        'configurationPolicies/pol-(.+)/assignments' {
+            $p = $F.Policies[$Matches[1]]
+            return (Fake-Ok @{ value = @($p.Targets | ForEach-Object { @{ target = @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget'; groupId = $_ } } }) })
+        }
         'deviceAppManagement/mobileApps' {
+            if ($F.DenyIntuneRead) { $global:LASTEXITCODE = 1; return 'ERROR: Forbidden (403): Authorization_RequestDenied' }
             $n = ([regex]::Match($j, "displayName eq '([^']+)'")).Groups[1].Value
             $assign = @($F.Intune[$n] | Where-Object { $_ } | ForEach-Object { @{ target = @{ groupId = $_ } } })
             return (Fake-Ok @{ value = @(@{ displayName = $n; assignments = $assign }) })
@@ -125,7 +140,7 @@ function Invoke-LabDataverse {
         '^GET systemusers' { if ($F.AppUser) { return (& $ok @{ value = @(@{ systemuserid = 'u-1'; systemuserroles_association = @(@{ roleid = 'role-1'; name = 'Zava Handoff Service' }) }) }) } return (& $ok @{ value = @() }) }
         '^POST systemusers$' { return (& $ok @{ systemuserid = 'u-1'; systemuserroles_association = @() }) }
         '^POST systemusers\(u-1\)/systemuserroles_association' { $F.AppUser = $true; return (& $ok $null) }
-        '^GET bots' { if ($F.Bot) { return (& $ok @{ value = @(@{ botid = 'bot-1'; name = 'Zava Claims Intake (CUA)'; schemaname = 'crcce_zava'; publishedon = $(if ($F.Instructions) { '2026-10-09T00:00:00Z' } else { $null }) }) }) } return (& $ok @{ value = @() }) }
+        '^GET bots' { if ($F.Bot) { return (& $ok @{ value = @(@{ botid = 'bot-1'; name = 'Zava Claims Intake (CUA)'; schemaname = 'crcce_zava'; publishedon = $(if ($F.Published) { '2026-10-09T00:00:00Z' } else { $null }); authenticationmode = $F.AuthMode }) }) } return (& $ok @{ value = @() }) }
         '^GET botcomponents' { return (& $ok @{ value = @(@{ data = 'kind: TaskDialog action: kind: InvokeComputerUsingAgentTaskAction' }) }) }
         '^GET workflows' { if ($F.Flow) { return (& $ok @{ value = @(@{ name = 'Zava claim request trigger'; statecode = 1; clientdata = 'crcce_claimrequest ExecuteCopilotAsyncV2 crcce_handoffreceipt crcce_zava' }) }) } return (& $ok @{ value = @() }) }
         default { throw "Unexpected Dataverse call in test: $Method $Path" }
@@ -147,7 +162,7 @@ function Invoke-LabWeb {
     }
     if (-not $F.Site) { return [pscustomobject]@{ Status = 404; Json = $null; Content = '' } }
     if ($Url -like '*/entra-config.json') { return [pscustomobject]@{ Status = 200; Json = [pscustomobject]$F.Site.Entra; Content = '' } }
-    if ($Url -like '*/region-config.json') { return [pscustomobject]@{ Status = 404; Json = $null; Content = '' } }
+    if ($Url -like '*/region-config.json') { if ($F.Site.Region) { return [pscustomobject]@{ Status = 200; Json = ($F.Site.Region | ConvertFrom-Json); Content = $F.Site.Region } }; return [pscustomobject]@{ Status = 404; Json = $null; Content = '' } }
     if ($Url -like '*/assets/*') { return [pscustomobject]@{ Status = 200; Json = $null; Content = "x=`"$($F.Site.Base)`"" } }
     return [pscustomobject]@{ Status = 200; Json = $null; Content = '<script type="module" src="/assets/index-abc.js"></script>' }
 }
@@ -162,7 +177,8 @@ function New-DemoStaticWebApp {
     $F.Calls.Add("New-DemoStaticWebApp build mcs=$OrchestratorUrl foundry=$FoundryOrchestratorUrl default=$DefaultBackend")
     $F.BuildEnv = @{ VITE_CUA_RUN_BASE_URL = $env:VITE_CUA_RUN_BASE_URL; VITE_AZURE_CLIENT_ID = $env:VITE_AZURE_CLIENT_ID; VITE_AZURE_TENANT_ID = $env:VITE_AZURE_TENANT_ID; VITE_AZURE_REDIRECT_URI = $env:VITE_AZURE_REDIRECT_URI }
     $entra = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot 'apps\ccaas-agent-desktop\public\entra-config.json') | ConvertFrom-Json
-    $F.Site = @{ Entra = @{ clientId = $entra.clientId; tenantId = $entra.tenantId }; Base = $env:VITE_CUA_RUN_BASE_URL }
+    $regionFile = Join-Path $RepoRoot 'apps\ccaas-agent-desktop\public\region-config.json'
+    $F.Site = @{ Entra = @{ clientId = $entra.clientId; tenantId = $entra.tenantId }; Base = $env:VITE_CUA_RUN_BASE_URL; Region = $(if (Test-Path $regionFile) { Get-Content -Raw $regionFile }) }
 }
 
 function Set-DemoHandoffOrchestratorCors { param($FunctionAppName, $ResourceGroup, $AllowedOrigin) $global:F.Cors += $AllowedOrigin }
@@ -174,7 +190,12 @@ function Invoke-LabScript {
     switch -Wildcard ($RelativePath) {
         '*Enable-W365aPrereqs.ps1' { $F.Groups[$Arguments.DynamicGroupName] = 'g-mcs' }
         '*Deploy-DemoEnvironment.ps1' {
-            if ($Arguments.Phase -eq 'WebLink') { return }
+            if ($Arguments.Phase -eq 'WebLink') {
+                # The real helper deletes a same-named policy and recreates it; record that it ran.
+                $F.WebLinkRuns += , $Arguments.Clone()
+                $F.Policies[$Arguments.CcaasWebLinkName] = @{ Url = $Arguments.CcaasWebLinkUrl; Targets = @($F.Groups[$Arguments.UserGroupName]) }
+                return
+            }
             $gid = if ($F.Groups.ContainsKey($Arguments.DeviceGroupName)) { $F.Groups[$Arguments.DeviceGroupName] } else { 'g-' + $F.Groups.Count }
             $F.Groups[$Arguments.DeviceGroupName] = $gid
             $F.Groups[$Arguments.UserGroupName] = 'g-presenters'
@@ -218,16 +239,30 @@ function Invoke-LabPython {
     $F.Calls.Add("python $j")
     if ($j -like '-m pip install*') { $F.Venv = $true; return [pscustomobject]@{ Code = 0; Text = '' } }
     if ($j -like '-c import*') { return [pscustomobject]@{ Code = $(if ($F.Venv) { 0 } else { 1 }); Text = '' } }
-    if ($j -like '*publish_mcs_agent_config.py*--dry-run') {
+    if ($j -like '*publish_mcs_agent_config.py*') {
+        # Mirrors the real helper: a dry run reports texts and publication; a write saves the
+        # texts and then publishes; --publish-only publishes only when something is unpublished.
+        $pending = -not $F.Published
+        if ($j -match '--published-after (\S+)' -and $F.Published -and $F.PublishedAt -and $F.PublishedAt -lt $Matches[1]) { $pending = $true }
+        $publication = @{ publishedon = $(if ($F.Published) { $F.PublishedAt }); latest_change = '2026-10-08T00:00:00Z'; unpublished_changes = $pending }
         $comp = if ($F.Instructions) { @{ agent = 'already as documented'; tool = 'already as documented' } } else { @{ agent = @{ will_change = @('instructions') }; tool = @{ will_change = @('action.instructions') } } }
-        return [pscustomobject]@{ Code = 0; Text = (@{ agent = 'x'; components = $comp } | ConvertTo-Json -Depth 5) }
+        if ($j -like '*--dry-run*') { return [pscustomobject]@{ Code = 0; Text = (@{ agent = 'x'; components = $comp; publication = $publication } | ConvertTo-Json -Depth 5) } }
+        if ($j -like '*--publish-only*') {
+            if (-not $F.Instructions) { return [pscustomobject]@{ Code = 1; Text = '--publish-only: the texts differ from the document' } }
+            if (-not $pending) { return [pscustomobject]@{ Code = 0; Text = '{"published": "not needed"}' } }
+        }
+        else { $F.Instructions = $true }
+        if ($F.FailPublishOnce) { $F.FailPublishOnce = $false; return [pscustomobject]@{ Code = 1; Text = 'Dataverse POST bots(bot-1)/Microsoft.Dynamics.CRM.PvaPublish failed: HTTP 500' } }
+        $F.PublishCalls += $j
+        $F.Published = $true; $F.PublishedAt = (Get-Date).ToUniversalTime().AddMinutes(1).ToString('yyyy-MM-ddTHH:mm:ssZ')
+        return [pscustomobject]@{ Code = 0; Text = '{"published": true}' }
     }
-    if ($j -like '*publish_mcs_agent_config.py*') { $F.Instructions = $true; return [pscustomobject]@{ Code = 0; Text = '{"published": true}' } }
     throw "Unexpected python call in test: $j"
 }
 
 function Invoke-LabGraphPs {
-    param([string]$Uri, [string]$TenantId, [switch]$DeviceCode)
+    param([string]$Uri, [string]$TenantId, [string[]]$Scopes, [switch]$DeviceCode)
+    if ($Uri -like '*configurationPolicies*') { throw 'Graph PowerShell sign-in refused (offline test).' }
     if ($Uri -like '*/assignments') { return [pscustomobject]@{ value = @($(if ($global:F.Pool) { @{ userPrincipalId = 'agent-user' } })) } }
     return [pscustomobject]@{ value = @([pscustomobject]@{ id = 'pool-1'; displayName = 'Zava Foundry pool' }) }
 }

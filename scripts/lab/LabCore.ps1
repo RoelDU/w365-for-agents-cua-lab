@@ -103,10 +103,64 @@ function Save-LabState([hashtable]$State, [string]$Path) {
 
 function Set-LabFound([hashtable]$State, [string]$Key, $Value) { if ($null -ne $Value -and "$Value" -ne '') { $State.found[$Key] = $Value } }
 
+function Get-LabPresenterPolicyName([hashtable]$State) {
+    # Each installation gets its own Edge policy, so it never takes over another lab's policy.
+    $c = $State.choices
+    if ($c.presenterPolicyName) { return [string]$c.presenterPolicyName }
+    return "Zava Contact Center - $($c.staticWebApp)"
+}
+
+function Get-LabRunTarget([hashtable]$State, [string]$StageId) {
+    # What a completion record is about. A record only counts for the same target, so a changed
+    # group, address or policy name is never satisfied by proof about the old one.
+    $c = $State.choices
+    switch ($StageId) {
+        'tenant-prep' { return "group=$($c.mcsDeviceGroup)" }
+        'mcs-claims-app' { return "app=Zava Claims Workstation|group=$($c.mcsDeviceGroup)" }
+        'mcs-shortcut' { return "app=Zava Claims Agent Launch Shortcut|group=$($c.mcsDeviceGroup)" }
+        'foundry-claims-app' { return "app=Zava Claims Workstation|group=$($c.foundryDeviceGroup)" }
+        'presenter-icon' { return "policy=$(Get-LabPresenterPolicyName $State)|url=$($State.found.zavaUrl)/|group=$($c.presenterGroup)" }
+        default { return '' }
+    }
+}
+
 function Add-LabRun([hashtable]$State, [string]$StageId, [string]$Note) {
-    # A record that a helper script finished without an error. Used only together with a live
-    # read, never as proof on its own.
-    $State.runs[$StageId] = @{ atUtc = (Get-Date).ToUniversalTime().ToString('o'); note = $Note }
+    # A record that a helper script finished without an error, bound to its target. Used only
+    # together with a live read, never as proof on its own.
+    $State.runs[$StageId] = @{ atUtc = (Get-Date).ToUniversalTime().ToString('o'); note = $Note; target = (Get-LabRunTarget $State $StageId) }
+}
+
+function ConvertTo-LabUtcText($Value) {
+    # Saved times come back from the state file as [datetime] (ConvertFrom-Json turns ISO text into
+    # dates); helpers compare times as ISO 8601 UTC text, so always pass them in that form.
+    if ($null -eq $Value) { return '' }
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+    return [string]$Value
+}
+
+function Get-LabRun([hashtable]$State, [string]$StageId) {
+    # The completion record for this stage, only if it is about the stage's current target.
+    $run = $State.runs[$StageId]
+    if (-not $run) { return $null }
+    if ($run.target) { if ($run.target -eq (Get-LabRunTarget $State $StageId)) { return $run }; return $null }
+    # Records written before targets were recorded: the Intune app stages saved their group name
+    # as the note, so a record for the same group is still valid. Others cannot be matched.
+    $legacyGroup = @{ 'mcs-claims-app' = $State.choices.mcsDeviceGroup; 'mcs-shortcut' = $State.choices.mcsDeviceGroup; 'foundry-claims-app' = $State.choices.foundryDeviceGroup }[$StageId]
+    if ($legacyGroup -and $run.note -eq $legacyGroup) {
+        $run.target = Get-LabRunTarget $State $StageId
+        return $run
+    }
+    return $null
+}
+
+function Remove-LabStaleRuns([hashtable]$State) {
+    # After choices change: forget records about targets that are no longer chosen. Records
+    # about unchanged targets are kept.
+    $removed = @()
+    foreach ($id in @($State.runs.Keys)) {
+        if (-not (Get-LabRun $State $id)) { $State.runs.Remove($id); $removed += $id }
+    }
+    return $removed
 }
 
 # ---------------------------------------------------------------- Azure CLI and HTTP

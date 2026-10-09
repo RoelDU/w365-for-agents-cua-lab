@@ -228,6 +228,8 @@ function Invoke-LabSetup {
             Write-LabWarn 'The destination changed, so everything setup found or recorded for the previous destination was cleared.'
             $state.found = @{}; $state.runs = @{}; $state.approvals = @{}
         }
+        $stale = @(Remove-LabStaleRuns $state)
+        if ($stale.Count) { Write-LabWarn "These steps are checked again, because their target changed (for example a group name): $($stale -join ', ')." }
         Save-LabState $state $paths.State
     }
     else {
@@ -248,7 +250,7 @@ function Invoke-LabSetup {
     }
     if ($todo -gt 0) {
         Write-Host ''
-        Write-LabInfo 'Setup now works through the steps marked [to do], in order. It asks again before tenant-wide consent, before turning the Foundry agent on, and before changing anything that already exists.'
+        Write-LabInfo 'Setup now works through the steps marked [to do], in order. It asks again before tenant-wide consent, before publishing the Copilot Studio agent, before turning the Foundry agent on, and before changing anything that already exists.'
         if (-not (Confirm-Lab 'Start?')) { return (New-LabOutcome 'Declined' '' 'Nothing was changed.') }
     }
 
