@@ -37,12 +37,14 @@ Describe 'Install-Lab.ps1 entry point on a computer without the tools' {
             $code = $LASTEXITCODE
         }
         finally { $env:PATH = $savedPath }
+        $stateWritten = Test-Path $state
+        Remove-Item -Recurse -Force -LiteralPath $empty -ErrorAction SilentlyContinue
         $code | Should Be 1
         $out | Should Match 'MISSING Azure CLI'
         $out | Should Match 'winget install --exact --id Microsoft.AzureCLI'
         $out | Should Match 'winget install --exact --id Microsoft.Azure.FunctionsCoreTools'
         $out | Should Match 'winget install --exact --id Python.Python.3.12'
-        (Test-Path $state) | Should Be $false
+        $stateWritten | Should Be $false
     }
 }
 
@@ -54,6 +56,8 @@ Describe 'Guided setup: the whole journey from a fresh copy (both paths)' {
     Reset-LabFake
     $F.Deployed = @()
     $statePath = Join-Path $root 'scripts\lab-setup.local.json'
+    $global:LabTestCopy1 = $root
+    AfterAll { if ($global:LabTestCopy1) { Remove-Item -Recurse -Force -LiteralPath $global:LabTestCopy1 -ErrorAction SilentlyContinue } }
 
     It 'preview asks the choices once, shows the destination and plan, and changes nothing' {
         # tenant (Enter = signed-in tenant), subscription 1, region, resource group (default),
@@ -153,6 +157,8 @@ Describe 'Guided setup: failure, missing permission and existing resources' {
     $root = New-LabCopy
     foreach ($p in $labParts) { . (Join-Path $root "scripts\lab\$p.ps1") }
     . (Join-Path $here 'LabFakes.ps1')
+    $global:LabTestCopy2 = $root
+    AfterAll { if ($global:LabTestCopy2) { Remove-Item -Recurse -Force -LiteralPath $global:LabTestCopy2 -ErrorAction SilentlyContinue } }
 
     It 'stops when a read fails, instead of treating it as missing and creating a duplicate' {
         Reset-LabFake
