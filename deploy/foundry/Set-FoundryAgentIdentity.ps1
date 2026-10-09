@@ -45,7 +45,9 @@ param(
     [Parameter(Mandatory = $true)][string]$AgentIdentityId,
     [Parameter(Mandatory = $true)][string]$AgentUserPrincipalName,
     [string]$AgentUserDisplayName = 'Zava Claims Foundry agent',
-    [switch]$Apply
+    [switch]$Apply,
+    # Also return the IDs and the list of changes as an object (used by scripts\Install-Lab.ps1).
+    [switch]$PassThru
 )
 
 $ErrorActionPreference = 'Stop'
@@ -142,9 +144,18 @@ foreach ($r in $Resources) {
     }
     $grant = @($grants) | Where-Object { $_.resourceId -eq $sp.id -and $_.consentType -eq 'AllPrincipals' } | Select-Object -First 1
     if (-not ($grant -and (" $($grant.scope) " -like "* $($r.Scope) *"))) {
-        $plan.Add("Grant tenant-wide consent for $($r.Scope)")
-        if ($Apply) {
-            Invoke-Graph POST '/oauth2PermissionGrants' @{ clientId = $blueprintSp.id; consentType = 'AllPrincipals'; resourceId = $sp.id; scope = $r.Scope } | Out-Null
+        if ($grant) {
+            # One tenant-wide grant per resource: add the scope to it rather than creating another.
+            $plan.Add("Add $($r.Scope) to the existing tenant-wide consent for $($r.Name)")
+            if ($Apply) {
+                Invoke-Graph PATCH "/oauth2PermissionGrants/$($grant.id)" @{ scope = ("$($grant.scope) $($r.Scope)").Trim() } | Out-Null
+            }
+        }
+        else {
+            $plan.Add("Grant tenant-wide consent for $($r.Scope)")
+            if ($Apply) {
+                Invoke-Graph POST '/oauth2PermissionGrants' @{ clientId = $blueprintSp.id; consentType = 'AllPrincipals'; resourceId = $sp.id; scope = $r.Scope } | Out-Null
+            }
         }
     }
 }
@@ -164,3 +175,13 @@ Write-Host "  CLAIMS_TENANT_ID     = $TenantId"
 Write-Host "  CLAIMS_BLUEPRINT_ID  = $blueprintAppId"
 Write-Host "  CLAIMS_AGENT_ID      = $($agent.appId)"
 Write-Host ("  CLAIMS_AGENT_USER_ID = " + $(if ($user) { $user.id } else { '(created by -Apply)' }))
+if ($PassThru) {
+    [pscustomobject]@{
+        TenantId    = $TenantId
+        BlueprintId = $blueprintAppId
+        AgentId     = $agent.appId
+        AgentUserId = $(if ($user) { [string]$user.id } else { '' })
+        Changes     = @($plan)
+        Applied     = [bool]$Apply
+    }
+}

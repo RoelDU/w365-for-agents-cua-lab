@@ -1234,7 +1234,10 @@ function New-DemoStaticWebApp {
         # Only set the legacy FOUNDRY_* / AZURE_CLIENT_SECRET /api app settings when the
         # opt-in Foundry path is in play. The default Copilot Studio path does not use
         # the SWA-managed /api, so these are skipped.
-        [switch]$IncludeFoundry
+        [switch]$IncludeFoundry,
+        # Create (or find) the resource and return its URL without building or deploying
+        # the site. Install-Lab.ps1 needs the URL first, for the sign-in app registration.
+        [switch]$ResourceOnly
     )
 
     Write-Host "`n=== Central CCaaS host: Azure Static Web Apps (Free) ==="
@@ -1271,7 +1274,10 @@ function New-DemoStaticWebApp {
     # 3) Build the SPA (the API is built in the cloud by the SWA deploy/Oryx). When an
     #    orchestrator URL is supplied, bake it into the build via VITE_ORCHESTRATOR_URL
     #    so the deployed desktop points straight at the orchestrator with no manual config.
-    if ($PSCmdlet.ShouldProcess($paths.App, 'npm ci + npm run build (SPA)')) {
+    if ($ResourceOnly) {
+        Write-Host "  -ResourceOnly: not building or deploying the site now."
+    }
+    elseif ($PSCmdlet.ShouldProcess($paths.App, 'npm ci + npm run build (SPA)')) {
         Push-Location $paths.App
         $bakeOrch = -not [string]::IsNullOrWhiteSpace($OrchestratorUrl)
         $bakeFoundry = -not [string]::IsNullOrWhiteSpace($FoundryOrchestratorUrl)
@@ -1349,7 +1355,8 @@ $_
     #    - so we deploy static content only. Passing --api-location there makes the SWA
     #    CLI package managed Functions we never call, and its deprecated default runtime
     #    (Node 16, EOL) fails StaticSitesClient with a generic exit code 1.
-    if ($PSCmdlet.ShouldProcess($name, 'Deploy SPA + API (swa deploy)')) {
+    if ($ResourceOnly) { }
+    elseif ($PSCmdlet.ShouldProcess($name, 'Deploy SPA + API (swa deploy)')) {
         $token = $null
         if (-not $WhatIfPreference) {
             $token = (& az staticwebapp secrets list --name $name --resource-group $rg --query "properties.apiKey" -o tsv 2>$null)
@@ -1382,7 +1389,8 @@ $_
     #    relevant on the opt-in Foundry path; the default Copilot Studio path does not
     #    use the SWA-managed /api, so skip these entirely. Secret value is passed to az
     #    (its own process arg) but kept out of OUR logs via -NoEcho.
-    if (-not $IncludeFoundry) {
+    if ($ResourceOnly) { }
+    elseif (-not $IncludeFoundry) {
         Write-Host "  Skipping legacy FOUNDRY_* /api app settings (Copilot Studio path; pass -IncludeFoundry to set them)."
     }
     elseif ($PSCmdlet.ShouldProcess($name, 'Set /api application settings')) {
