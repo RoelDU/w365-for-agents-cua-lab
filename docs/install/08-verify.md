@@ -40,6 +40,28 @@ For MCS, start with one test transfer and watch `/api/cua-run/{runId}/progress` 
 
 If the result is not real and `CUA_REQUIRE_REAL_RESULT=1`, the run should fail rather than return a fake claim.
 
+### Native run history (after an approved real MCS run)
+
+Run this only after a real transfer that you were allowed to start; do not start one just to
+check history. Use the account described in [section 4.6](05-mcs-path.md#46-native-run-history-in-copilot-studio-activity).
+
+1. When the run has finished, open Copilot Studio > the agent > **Activity**. Sort by date.
+2. Open the row for this run. It is usually listed as **Automated**, at the time of the transfer.
+3. Match it to the transfer: the transcript's first message is the handoff JSON, and its
+   `request_id` must be the Zava request ID of this call.
+4. Open the **Computer use** step. Confirm that the explanations are there and that the
+   **screenshots are actually shown** for the actions (the side panel's session replay steps
+   through them). A screenshot count or a Dataverse record count is not enough: record that you
+   saw the images.
+5. Note what you see, without treating it as more than it is:
+   - a `SessionHasLoggedOff` entry after the sign-out is the agent ending the Cloud PC session;
+   - the claim outcome is the one Zava showed (step 5 above), checked against the Claims app;
+     Activity history and Cloud PC clean-up are separate from it.
+
+If the row is missing: check the agent uses **Authenticate with Microsoft** and is published, the
+Microsoft 365 data storage setting, the viewing account's Exchange mailbox, and sharing (section
+4.6). Runs from before the authentication change are not added afterwards.
+
 ## 7.4 Foundry path
 
 1. Run the preparation check in [Presenting](presenting.md) first.

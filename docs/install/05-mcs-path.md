@@ -5,10 +5,11 @@
 This path is the supported MCS install path:
 
 ```text
-Zava -> POST /api/cua-run -> Dataverse trigger row -> Power Automate autonomous trigger flow -> Copilot Studio agent -> Computer Use -> Claims app
+Zava -> POST /api/cua-run -> Dataverse trigger row -> Power Automate cloud flow (Dataverse trigger, Execute Agent and wait) -> Copilot Studio agent -> Computer Use -> Claims app
 ```
 
-It is not the old Direct Line path.
+It is not the old Direct Line path. The agent uses **Authenticate with Microsoft** (step 4.3);
+the retired Direct Line path needed a different setting, which must not be applied here.
 
 ## 4.1 Create the Dataverse trigger table
 
@@ -67,7 +68,16 @@ Manual portal step.
 
 1. Create an agent named for your environment, for example **Zava Claims Intake (CUA)**.
 2. Turn on generative orchestration.
-3. Require authentication. Computer Use is disabled for unauthenticated agents.
+3. Under **Settings > Security > Authentication**, choose **Authenticate with Microsoft** (the
+   default for a new agent) and save. This lab needs exactly this mode:
+   - Computer Use is disabled for agents without authentication.
+   - The native run history in Copilot Studio **Activity** (the run's explanations and
+     screenshots, section 4.6) needs it: Microsoft states that the agent "must use integrated
+     Microsoft authentication" to identify interactions
+     ([Review agent activity](https://learn.microsoft.com/microsoft-copilot-studio/authoring-review-activity)).
+     Other authenticated modes are not known to give the same history.
+   - The guided setup reads this setting and stops with the exact fix if it differs. It never
+     changes it for you.
 4. Add a **Computer Use** tool. In its **Machines** setting choose **Cloud PC pool** and create
    the MCS pool:
    - billing: a tenant can create up to two Cloud PC pools without a Windows 365 for Agents
@@ -88,17 +98,35 @@ Manual portal step.
 6. Paste the **Agent instructions** block into **Overview > Instructions**.
 7. Paste the **Computer use tool instructions** block into **Tools > Computer use > Instructions**.
 8. Leave the Computer Use tool **Inputs** empty. The current working configuration has no tool inputs.
-9. Save, then publish the agent.
+9. Save, then **Publish** the agent (top right in Copilot Studio). Saving changes only the draft:
+   a transfer runs the last **published** version, so a change to the instructions or to the
+   authentication takes effect only after publishing. Publishing makes every saved change live,
+   including changes other people saved in the same agent.
 
 You can also apply the same two text blocks with the publish helper (the guided setup runs it
-for you in its step 12). It needs Python with PyYAML and the Azure CLI signed in as a System
-Customizer or System Administrator in the environment. The agent schema name is under
-**Settings > Advanced > Metadata** in Copilot Studio. Dry run first, then apply and publish:
+for you in its step 12 and asks before publishing). It needs Python with PyYAML and the Azure CLI
+signed in as a System Customizer or System Administrator in the environment. The agent schema
+name is under **Settings > Advanced > Metadata** in Copilot Studio. Dry run first, then apply and
+publish:
 
 ```powershell
 python .\scripts\mcs\publish_mcs_agent_config.py --org-url https://<your-org>.crm.dynamics.com --agent-schema <agent-schema-name> --dry-run
 python .\scripts\mcs\publish_mcs_agent_config.py --org-url https://<your-org>.crm.dynamics.com --agent-schema <agent-schema-name>
 ```
+
+The dry run also reports `publication.unpublished_changes`. If the texts already match but the
+agent still has unpublished changes (for example because an earlier publish failed), publish
+without writing anything:
+
+```powershell
+python .\scripts\mcs\publish_mcs_agent_config.py --org-url https://<your-org>.crm.dynamics.com --agent-schema <agent-schema-name> --publish-only
+```
+
+It publishes only when something is unpublished, and never rewrites the texts. It detects saved
+changes to the agent's topics and tools, not changes to agent settings such as authentication: after
+changing only the authentication, add `--published-after <UTC time of the change, for example
+2026-10-09T09:00:00Z>`, or simply select **Publish** in Copilot Studio. The guided setup records that
+time itself when it sees the authentication corrected.
 
 It backs up the live definitions to `scripts\mcs\backups` first. More detail: the **How to apply
 it** section in [`..\mcs-computer-use-instructions.md`](../mcs-computer-use-instructions.md).
@@ -107,9 +135,15 @@ How the call's details reach Computer Use: the tool instructions contain `{Syste
 
 Do not invent alternate instructions. The Claims app is a screen-driven workflow; small wording changes can change what the model clicks.
 
-## 4.4 Create the autonomous trigger flow
+## 4.4 Create the trigger flow
 
-The trigger must run as a Copilot Studio autonomous trigger flow so the run appears in Copilot Studio **Activity**. Do not use a manual test-only flow for the install.
+The trigger is an ordinary automated **Power Automate cloud flow**, separate from the agent: a
+Dataverse trigger starts the agent with **Execute Agent and wait** and writes the receipt back to
+the same row. No trigger needs to be added inside the agent for the run history: in the
+reference setup, with the agent on **Authenticate with Microsoft**, runs started by this
+separate flow appear in Copilot Studio **Activity** with their explanations and screenshots
+(section 4.6). Keep the flow exactly as described below; the handoff service depends on its
+receipt. Do not use a manual test-only flow for the install.
 
 A sanitized template is committed at:
 
@@ -195,3 +229,34 @@ Use one of these exact methods:
    ```
 
 Set the returned `botid` as the Function app setting `CUA_AGENT_BOTID`.
+
+## 4.6 Native run history in Copilot Studio Activity
+
+After a run finishes, Copilot Studio can show it on the agent's **Activity** page: the
+conversation, the agent's steps, and for the Computer Use step the model's explanation and a
+screenshot of the Cloud PC for each action, with a session replay. This is Microsoft's own
+record; Zava does not need to be open.
+
+What it needs, beyond what the agent needs to run:
+
+| Requirement | Why | Where |
+| --- | --- | --- |
+| Agent authentication **Authenticate with Microsoft** (step 4.3), published | History identifies interactions through integrated Microsoft authentication. | Copilot Studio > agent > **Settings > Security > Authentication**, then **Publish**. |
+| Microsoft 365 data storage for Copilot Studio **allowed** | Activity history is stored in Microsoft 365. If an administrator turned this off, no new history is stored. | Power Platform admin center, Copilot Studio data movement settings ([Manage activity data](https://learn.microsoft.com/microsoft-copilot-studio/manage-activity-data-m365)). |
+| The person who **views** the history has an Exchange licence and a mailbox | Microsoft: "You must have a Microsoft Exchange license and an inbox to view historical agent activity." This is for viewing only. It is not a new licence requirement for running either agent path. | Microsoft 365 admin center > the user > **Licenses and apps**. |
+| The right account, or sharing | Only your own interactions, and those where the agent used your credentials, appear unless an administrator enables sharing of activity transcripts. View Activity as the account that owns the trigger flow's Copilot Studio connection (as the reference setup did), or enable sharing. | Copilot Studio agent sharing ([Share agents](https://learn.microsoft.com/microsoft-copilot-studio/admin-share-bots)). |
+| Computer Use logs in Dataverse (default on), verbosity **All data** (default), enough retention | The session replay and per-action side panel come from these logs. **Data without screenshots** removes the screenshots there. Default retention is 7 days. The handoff service also reads these logs to show progress and recognise a filed claim, so keep them on. | Power Platform admin center > environment > **Settings > Products > Features > Computer Use** ([Monitor computer use](https://learn.microsoft.com/microsoft-copilot-studio/monitor-computer-use)). |
+
+Good to know:
+
+- **No backfill.** In the reference setup, runs from before the agent was switched to
+  **Authenticate with Microsoft** did not appear afterwards. Expect only new runs.
+- **Sign-out at the end.** The agent signs out of the Cloud PC when it finishes. The session can
+  then show `SessionHasLoggedOff`; that is the deliberate sign-out, not a failed claim. Whether a
+  claim was filed is shown in Zava and in the Claims app, separately from the Cloud PC clean-up.
+- **Timing.** A run takes several minutes, more on a newly prepared Cloud PC (see the presenting
+  guide). History appears for the finished run; it is not a live view.
+- No native screenshot history has been established for the Foundry path; its live view is in
+  Zava only.
+
+How to check a run: [verification, section 7.3](08-verify.md#73-mcs-path).

@@ -27,6 +27,7 @@ The full inventory, with Microsoft sources and how to check each item, is
 | Windows 365 for Agents billing for the Copilot Studio Cloud PC pool, once the trial allowance is used up; Anthropic models allowed by an administrator | Copilot Studio path |
 | A Windows 365 for Agents billing policy (Microsoft 365 admin center, Copilot > Cost management) | Foundry path |
 | A region where Foundry hosted agents are offered, with quota for the `gpt-4.1-mini` model | Foundry path |
+| To **view** a finished Copilot Studio run's history (explanations and screenshots) in Copilot Studio **Activity**: an Exchange licence and mailbox for the person viewing, and Microsoft 365 data storage for Copilot Studio left on | Optional, Copilot Studio path ([details](05-mcs-path.md#46-native-run-history-in-copilot-studio-activity)); not needed to run either path |
 
 A missing product entitlement blocks the installation. Setup cannot buy or enable a licence.
 
@@ -124,8 +125,8 @@ changing anything else that already existed.
 | 8 | Power Platform environment | Holds the agent and its data | Power Platform Administrator | You chose an environment with Dataverse |
 | 9 | Create the Dataverse trigger table | One row per transfer starts the agent | Environment administrator | Table exists |
 | 10 | Let the handoff service use Dataverse | Narrow role to write rows and read progress | Environment administrator | Application user has its role |
-| 11 | **Portal:** create the Copilot Studio agent | No supported script exists for this | Copilot Studio maker | Agent exists with a Computer use tool |
-| 12 | Write the agent instructions and publish | The documented instructions, applied exactly | Environment administrator | Instructions match; agent published |
+| 11 | **Portal:** create the Copilot Studio agent | No supported script exists for this | Copilot Studio maker | Agent exists with a Computer use tool and uses **Authenticate with Microsoft** |
+| 12 | Write the agent instructions and publish | The documented instructions, applied exactly; a transfer runs the last published version | Environment administrator, with your yes to publish | Instructions match; published, with no unpublished changes |
 | 13 | **Portal:** create the trigger flow | Flow connections need your own sign-in | Copilot Studio maker | Flow exists and is on |
 | 14 | Create the Foundry project, model and registry | Where the agent runs and what it calls | You | All exist with the right roles |
 | 15 | Build the agent image in your registry | Built from your download, pinned by digest | You | Image is in your registry |
@@ -135,8 +136,8 @@ changing anything else that already existed.
 | 19 | **Portal:** create the Foundry agent's Cloud PC pool | Billing, size and image are your decisions | Intune Administrator | The pool lists the agent |
 | 20 | Turn the Foundry agent on | Only after identity and pool are ready | You, with explicit yes | New version active with execution on |
 | 21 | Connect the handoff service to the agents | Writes the IDs and addresses it found | You | All settings match |
-| 22 | Build and publish Zava | With this lab's sign-in app and addresses | You | Zava serves the right settings |
-| 23 | Give presenters the Zava desktop icon | Edge app icon for the presenter group | Intune Administrator | Published for the Zava address |
+| 22 | Build and publish Zava | With this lab's sign-in app, addresses and region | You | Zava serves the right settings, and its region matches the handoff service |
+| 23 | Give presenters the Zava desktop icon | Edge app icon for the presenter group, through an Intune policy of this installation's own | Intune Administrator | The policy installs the Zava address for the presenter group |
 | 24 | Readiness check | Reads everything once more | Setup (read-only) | Zava, both agents and the relay are ready |
 
 If you install only one path, the other path's steps are left out and the numbers change.
@@ -149,12 +150,20 @@ result and continues. To stop and come back later, type `later`. Nothing is lost
 
 What to expect at each:
 
-- **Step 11, Copilot Studio agent.** You create the agent with the name setup shows, keep
-  authentication on, and add a **Computer use** tool on a new Cloud PC pool. You do **not** paste
-  instructions or publish; step 12 does that. The pool takes about 30 minutes to provision; you
-  can continue meanwhile.
-- **Step 13, trigger flow.** A short automated cloud flow in Power Automate. Setup prints each
-  trigger and action with the exact table, agent and expressions.
+- **Step 11, Copilot Studio agent.** You create the agent with the name setup shows, keep its
+  authentication on **Authenticate with Microsoft** (the default), and add a **Computer use** tool
+  on a new Cloud PC pool. This lab needs exactly that authentication mode: Computer use needs
+  authentication, and the run history in Copilot Studio needs this mode. If you reuse an agent that
+  has another mode, setup says so and tells you where to change it; it never changes it itself.
+  You do **not** paste instructions or publish; step 12 does that. The pool takes about 30 minutes
+  to provision; you can continue meanwhile.
+- **Step 12, publish.** Saving in Copilot Studio changes only a draft; a transfer runs the last
+  published version. Setup asks before it publishes, and warns when the agent has other saved
+  changes, because publishing makes all of them live. If publishing fails, the next run publishes
+  without writing the texts again.
+- **Step 13, trigger flow.** A short automated cloud flow in Power Automate, separate from the
+  agent. Setup prints each trigger and action with the exact table, agent and expressions. No
+  trigger inside the agent is needed for the run history.
 - **Step 19, Foundry pool.** A provisioning policy (agents) in the Intune admin center, with your
   billing policy, the agent setup created, and the device group from step 18. Setup then finds
   the pool with a Microsoft Graph sign-in. If your account cannot read pools, setup asks you to
@@ -187,6 +196,8 @@ files a claim.
 - New Cloud PC pools can take a while before their first Cloud PC is ready, and the first run on
   each new Cloud PC is slower.
 - Add presenters' accounts to the group **Zava-Demo-Agent-Users** to give them the desktop icon.
+- After a Copilot Studio run you can open its history (explanations and screenshots) in Copilot
+  Studio **Activity**; see [verification, section 7.3](08-verify.md#73-mcs-path).
 - For running the demo, use the [presenting guide](presenting.md). A presenter needs only a
   browser.
 
@@ -209,6 +220,10 @@ excluded from Git. To change an answer later, run setup with `-ChooseAgain`.
 - **Licences and billing.** Buying products, the Windows 365 for Agents billing policies, and the
   Copilot Studio pay-as-you-go plan stay with you (see [prerequisites](01-prerequisites.md)).
 - **Portal-only steps** 8, 11, 13 and 19, as described above.
+- **Run history settings.** Setup does not change the Microsoft 365 data storage setting, the
+  Computer Use log settings, agent sharing or anyone's Exchange licence. It checks that the agent
+  uses **Authenticate with Microsoft** and is published; the rest is in
+  [section 4.6](05-mcs-path.md#46-native-run-history-in-copilot-studio-activity).
 - **Optional extras:** the Cloud PC availability gate in Zava
   ([step 6.2a](07-handoff-and-zava.md#62a-optional-cloud-pc-availability-gate-for-foundry-transfers)),
   which needs a tenant-wide Graph permission, and the Enrollment Status Page skip for the Foundry

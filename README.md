@@ -148,6 +148,13 @@ needs; it needs no checkout or developer tools.
   transfers on both backends filed synthetic claims and returned the observed claim number to
   the same interaction; the Foundry path showed the live Cloud PC session in Zava. Timings are
   in the presenting guide.
+- **Demonstrated** in the same environment on 9 October 2026, after the Copilot Studio agent was
+  set to **Authenticate with Microsoft** and published: a finished Zava transfer on the Copilot
+  Studio path opened in Copilot Studio **Activity** with its conversation, the model's
+  explanations and the Cloud PC screenshots, started by the unchanged separate trigger flow
+  ([install section 4.6](docs/install/05-mcs-path.md#46-native-run-history-in-copilot-studio-activity)).
+  Earlier runs were not added to that history, and no equivalent screenshot history has been
+  established for the Foundry path.
 - **Not demonstrated:** a fresh installation in a different tenant, whether by following the
   guide or with the guided setup (which has been tested offline against a simulated tenant only).
   Each step reads your tenant before it changes anything, but expect to adapt names, regions and

@@ -111,16 +111,38 @@ replace an existing file. By hand, the values are:
 ### MCS
 
 - Zava creates a Dataverse-backed CUA run.
-- The autonomous trigger flow starts the Copilot Studio agent.
+- The trigger flow starts the Copilot Studio agent.
 - Computer Use runs on the Copilot Studio Cloud PC pool.
 - Expected timing: in the reference environment on 7 October 2026 the claim number appeared 4 min 50 s, 5 min 31 s and 6 min 28 s after **Confirm** in three of four complete runs, and 13 min 24 s in the fourth. The time depends mostly on which Cloud PC the pool hands over. A freshly prepared one shows Windows "Account setup" for about 70 seconds and then may ignore keyboard and mouse input for between about 1 and 8 minutes while it finishes setting up (its Claims shortcuts still have blank icons). On a Cloud PC that was used before, the first launch used to show no window (the agent added the launch command to the old `shutdown /l` text in the Run box) and cost 60-90 seconds; since the Ctrl+A fix of 7 October 2026 evening, the next run on a used Cloud PC launched first time and the claim number appeared 4 min 5 s after **Confirm** (Claims ready at 2 min 16 s, signed out at 4 min 30 s). The first run on each newly prepared Cloud PC is still slow; the MCS pool in the reference tenant has two Cloud PCs, so after each has done one run, later runs avoid that setup delay until the pool replaces a Cloud PC. The claim work itself takes about 1.5-2 minutes. Plan the talk track for a possible long wait, or show the Foundry path when time is short.
 - The result appears in the same Zava interaction after the trigger flow writes the receipt back to Dataverse.
+
+### After an MCS run: the history in Copilot Studio
+
+Once the run has finished, you can show Microsoft's own record of it:
+
+1. Open Copilot Studio > the agent > **Activity**, signed in as the account set up for viewing
+   history ([install section 4.6](05-mcs-path.md#46-native-run-history-in-copilot-studio-activity)).
+2. Open the newest **Automated** row and check that the handoff in its first message has this
+   call's request ID.
+3. Open the **Computer use** step and step through the screenshots and explanations.
+
+What to say, and not say:
+
+- It appears after the run, not live. Runs from before the agent used **Authenticate with
+  Microsoft** are not in it.
+- The end of the transcript can show `SessionHasLoggedOff`: that is the agent signing out of the
+  Cloud PC on purpose. Do not present the history as free of warnings.
+- The claim number is the one Zava showed. The history shows what the agent did; signing out and
+  the Cloud PC reset are separate from whether the claim was filed.
+- The Foundry path has the live view in Zava; no equivalent screenshot history has been
+  established for it.
 
 ## If something is not ready
 
 - **Foundry card says No Cloud PC available yet** (or the optional prep tool says still preparing): wait, or use the backup video. Do not start a test transfer.
 - **MCS flow is off:** turn it on before the call, then use a fresh test only if there is enough time.
-- **MCS agent has unpublished changes:** publish before the call.
+- **MCS agent has unpublished changes:** publish before the call. A transfer runs the last published version.
+- **MCS run missing from Activity afterwards:** see [install section 4.6](05-mcs-path.md#46-native-run-history-in-copilot-studio-activity). Do not change the agent's authentication to anything other than **Authenticate with Microsoft**.
 - **Zava says reconnect Microsoft sign-in:** reconnect before the call.
 - **Cloud PC in use with no visible transfer:** open the existing transfer in Zava and check status/release. Do not start another transfer blindly.
 - **Live screen does not appear:** use the **Watch live screen** action if available.

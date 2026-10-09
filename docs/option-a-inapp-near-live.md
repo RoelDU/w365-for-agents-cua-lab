@@ -1,5 +1,13 @@
 # In-app near-live Computer Use view + full audit trail (Option A)
 
+> **Design note, not install steps.** The supported install is [install page 4](install/05-mcs-path.md).
+> Two statements below are superseded for this lab: the agent uses **Authenticate with Microsoft**
+> (the *Authenticate manually* setting mentioned for Direct Line applies only to the retired Direct
+> Line path and must not be applied here), and no trigger inside the agent is needed for the
+> Activity history: the supported separate Power Automate flow (install section 4.4) produced
+> native history with screenshots in the reference setup once the agent used Authenticate with
+> Microsoft. Section 2 below describes an alternative, not a requirement.
+
 This is how the CCaaS Agent Desktop shows the AI agent's Computer Use (CUA) run **inside the app,
 in near-real-time**, while **keeping the full Copilot Studio audit trail** (Activity → Session
 replay, with screenshots and reasoning).

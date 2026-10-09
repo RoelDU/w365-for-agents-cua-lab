@@ -5,7 +5,9 @@
 | Symptom | Likely effect | First checks |
 | --- | --- | --- |
 | Copilot Studio portal shows only a spinner | You cannot build or publish the MCS agent. | Confirm the environment has a Dataverse database. The default environment often does not. |
-| Computer Use says it is disabled for unauthenticated agents | MCS never starts a Cloud PC run. | Set the agent to require authentication, save, and publish again. |
+| Computer Use says it is disabled for unauthenticated agents | MCS never starts a Cloud PC run. | Set the agent's authentication to **Authenticate with Microsoft** (Settings > Security > Authentication), save, and publish again. |
+| A finished MCS run is missing from Copilot Studio **Activity**, or shows no screenshots | No native run history to review. | Agent on **Authenticate with Microsoft** and published; Microsoft 365 data storage for Copilot Studio on; the viewing account has an Exchange mailbox and owns the flow's Copilot Studio connection or has shared access; Computer Use logs stored in Dataverse with verbosity **All data**. Runs from before the authentication change are not added afterwards. See install section 4.6. |
+| Every MCS transfer fails with `REGION_MISMATCH` | Zava's selected region differs from the handoff service. | The `activeRegion` in Zava's `region-config.json` must equal `CUA_REGION` (install section 6.4). Run the guided setup again; it generates both from one value. |
 | No Cloud PC pool option in the Computer Use tool | The tool cannot bind to a pool. | Confirm generative orchestration is on, Cloud PC feature is enabled for the environment, tenant prerequisites are complete, and the environment geo supports the pool. |
 | MCS handoff creates a row but no result | Zava waits or fails. | Check the trigger flow run, agent publish state, Dataverse application user rights, `CUA_AGENT_BOTID`, and result field names. |
 | Progress screenshots are missing | Zava cannot show near-live progress. | Confirm the Function app identity can read `flowsessions`, `flowlogs`, and `flowsessionbinaries`. |

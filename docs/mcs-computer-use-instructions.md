@@ -11,8 +11,9 @@ The tool text is not the same as the Foundry guide
 
 ## How to apply it
 
-Either way, the agent must already exist with generative orchestration on, authentication
-required, and a **Computer use** tool pointed at your Cloud PC pool.
+Either way, the agent must already exist with generative orchestration on, authentication set to
+**Authenticate with Microsoft**, and a **Computer use** tool pointed at your Cloud PC pool. Both
+routes end with **Publish**: a transfer runs the last published version.
 
 - **By script (recommended):** `scripts/mcs/publish_mcs_agent_config.py` reads the two
   text blocks below from this file, backs up the live agent and tool definitions, writes only those
