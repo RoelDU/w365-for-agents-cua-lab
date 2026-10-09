@@ -1,12 +1,14 @@
 # 5. Foundry hosted path
 
+> **Reference page.** The guided setup in the [install guide](README.md) does this page's work for you (steps 14-17 and 20 there). Use this page to understand a step, to troubleshoot, or to install by hand.
+
 This path is the supported pro-code install path:
 
 ```text
 Zava -> /api/foundry-claims/* relay -> Foundry hosted agent Invocations endpoint -> Windows 365 for Agents Cloud PC -> Claims app
 ```
 
-The deep implementation reference remains [`..\..\samples\foundry-hosted-claims\README.md`](../../samples/foundry-hosted-claims/README.md). This page gives the repeatable install shape and the repository script.
+How the agent works is described in the [sample overview](../../samples/foundry-hosted-claims/README.md) and its reference pages. This page gives the repeatable install shape and the repository scripts.
 
 ## 5.1 Prepare the Foundry project, identity, and permissions
 

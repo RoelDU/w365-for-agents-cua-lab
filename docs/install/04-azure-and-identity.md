@@ -1,5 +1,7 @@
 # 3. Azure resources and app registrations
 
+> **Reference page.** The guided setup in the [install guide](README.md) does this page's work for you (steps 1-3 and 23 there). Use this page to understand a step, to troubleshoot, or to install by hand.
+
 ## 3.1 Create the Azure resources
 
 The current handoff service is an Azure Functions app plus Storage, with a system-assigned managed identity. The Zava desktop is hosted as an Azure Static Web App.

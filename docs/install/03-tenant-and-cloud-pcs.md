@@ -1,5 +1,7 @@
 # 2. Tenant, Intune, and Cloud PC pools
 
+> **Reference page.** The guided setup in the [install guide](README.md) does this page's work for you (steps 5-8, 18 and 19 there). Use this page to understand a step, to troubleshoot, or to install by hand.
+
 ## 2.1 Create or choose the Power Platform environment
 
 Manual portal step.

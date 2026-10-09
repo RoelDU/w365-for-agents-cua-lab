@@ -127,7 +127,11 @@ tool in the Foundry portal designer. Details:
    product, licence, billing plan, Microsoft Entra ID setting, permission and installer tool that
    the two paths depend on, which ones you must already have and which ones the guide creates.
    A missing product entitlement blocks the installation; it is not a detail to sort out later.
-2. **Follow the one ordered guide:** [`docs\install\README.md`](docs/install/README.md).
+2. **Follow the [install guide](docs/install/README.md).** Download the files as a ZIP and run
+   the guided setup, `scripts\Install-Lab.ps1`. It asks your choices once, previews before it
+   changes anything, does the technical work with the repository's scripts, and tells you exactly
+   what to do at the few steps that need a Microsoft portal. You need no Git, programming or JSON
+   editing; administrators sign in when setup asks for their role.
 
 In short, both paths need a Microsoft Entra ID tenant, Microsoft Intune, Microsoft Agent 365 and
 an Azure subscription. The MCS path adds Microsoft Entra ID P1 (for a dynamic device group),
@@ -144,9 +148,10 @@ needs; it needs no checkout or developer tools.
   transfers on both backends filed synthetic claims and returned the observed claim number to
   the same interaction; the Foundry path showed the live Cloud PC session in Zava. Timings are
   in the presenting guide.
-- **Not demonstrated:** a fresh installation in a different tenant by following the guide.
-  The guide is written from the scripts and the reference setup, and each step has a read-only
-  check, but expect to adapt names, regions and quotas.
+- **Not demonstrated:** a fresh installation in a different tenant, whether by following the
+  guide or with the guided setup (which has been tested offline against a simulated tenant only).
+  Each step reads your tenant before it changes anything, but expect to adapt names, regions and
+  quotas.
 - **Install defaults are safe:** a new Foundry agent version has its execution gates off and
   refuses desktop work until the owner turns them on after identity setup.
 

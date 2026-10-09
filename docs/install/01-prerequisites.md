@@ -138,8 +138,11 @@ func --version          # Azure Functions Core Tools v4
 swa --version           # Azure Static Web Apps CLI, or use npx
 ```
 
-If a tool is missing, install it before continuing. Only the one-time installer needs these
-tools. A presenter needs only a browser. An operator who chooses to run the optional Foundry demo
+If a tool is missing, install it before continuing. The guided setup (`scripts\Install-Lab.ps1`)
+checks these tools first and prints one `winget install` command for each missing one; it also
+offers to install the PowerShell modules below for your account, and keeps the Python packages in
+a private folder of the download, so you do not need to set up Python yourself. Only the one-time
+installer needs these tools. A presenter needs only a browser. An operator who chooses to run the optional Foundry demo
 prep tool needs Windows PowerShell 5.1 or PowerShell 7, the Azure CLI and its optional sign-ins
 in section 0.2, but no Git, Node or Python.
 

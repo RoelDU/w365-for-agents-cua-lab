@@ -1,5 +1,10 @@
 # 1. Values worksheet
 
+> **With the guided setup you do not fill this in.** `scripts\Install-Lab.ps1` finds these values
+> itself, keeps them in `scripts\lab-setup.local.json` on your computer (git-ignored; names, IDs
+> and addresses only) and writes them into the config files and settings below. This page is for
+> an installation by hand, and to explain what each value is.
+
 Copy this table into your private notes. Do not commit the filled-in values.
 
 | Value | Filled in at step | Used later for |

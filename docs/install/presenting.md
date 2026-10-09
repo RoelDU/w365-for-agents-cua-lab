@@ -83,7 +83,10 @@ file a claim, call the Foundry agent or take a Cloud PC. See
 - **When:** about 30 minutes before, `.\Prepare-FoundryDemo.cmd -WaitForCloudPcMinutes 20`;
   2-5 minutes before, `.\Prepare-FoundryDemo.cmd`.
 
-Values in `foundry-demo.config.json` (from the package template):
+Values in `foundry-demo.config.json` (from the package template). The guided setup
+(`scripts\Install-Lab.ps1`) writes this file for you as
+`scripts\foundry-demo-prep\foundry-demo.config.json` when the Foundry path is ready; it does not
+replace an existing file. By hand, the values are:
 
 | Template value | What to put there |
 | --- | --- |

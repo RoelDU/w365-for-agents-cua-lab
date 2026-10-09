@@ -1,5 +1,7 @@
 # 6. Handoff service and Zava deployment
 
+> **Reference page.** The guided setup in the [install guide](README.md) does this page's work for you (steps 21 and 22 there). Use this page to understand a step, to troubleshoot, or to install by hand.
+
 ## 6.1 Set Function app settings for the MCS path
 
 Set these on the handoff Function app. Use your actual names if you changed the Dataverse schema.

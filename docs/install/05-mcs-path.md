@@ -1,5 +1,7 @@
 # 4. Copilot Studio path (MCS)
 
+> **Reference page.** The guided setup in the [install guide](README.md) does this page's work for you (steps 9-13 there). Use this page to understand a step, to troubleshoot, or to install by hand.
+
 This path is the supported MCS install path:
 
 ```text
@@ -88,14 +90,18 @@ Manual portal step.
 8. Leave the Computer Use tool **Inputs** empty. The current working configuration has no tool inputs.
 9. Save, then publish the agent.
 
-You can also apply the same two text blocks with the publish helper:
+You can also apply the same two text blocks with the publish helper (the guided setup runs it
+for you in its step 12). It needs Python with PyYAML and the Azure CLI signed in as a System
+Customizer or System Administrator in the environment. The agent schema name is under
+**Settings > Advanced > Metadata** in Copilot Studio. Dry run first, then apply and publish:
 
 ```powershell
-python .\scripts\mcs\publish_mcs_agent_config.py --help
-python .\scripts\mcs\publish_mcs_agent_config.py --dry-run <your options>
+python .\scripts\mcs\publish_mcs_agent_config.py --org-url https://<your-org>.crm.dynamics.com --agent-schema <agent-schema-name> --dry-run
+python .\scripts\mcs\publish_mcs_agent_config.py --org-url https://<your-org>.crm.dynamics.com --agent-schema <agent-schema-name>
 ```
 
-Use the script's own help and the **How to apply it** section in [`..\mcs-computer-use-instructions.md`](../mcs-computer-use-instructions.md). Run `--dry-run` first.
+It backs up the live definitions to `scripts\mcs\backups` first. More detail: the **How to apply
+it** section in [`..\mcs-computer-use-instructions.md`](../mcs-computer-use-instructions.md).
 
 How the call's details reach Computer Use: the tool instructions contain `{System.Activity.Text}`, which Copilot Studio replaces with the handoff JSON that started the run. Paste the instructions exactly. Do not add tool **Inputs** by editing the tool definition: Copilot Studio then does not start the tool at all (details in [the MCS agent configuration](../mcs-computer-use-instructions.md#how-the-calls-details-reach-computer-use)).
 
