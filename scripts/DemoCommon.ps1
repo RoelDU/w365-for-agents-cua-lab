@@ -671,6 +671,82 @@ function Test-CopilotStudioReady {
     }
 }
 
+# Node.js 22 is the last Node.js version Microsoft supports for Linux Consumption plan apps
+# (supported until 30 April 2027; the plan itself retires on 30 September 2028):
+# https://learn.microsoft.com/azure/azure-functions/supported-languages
+$script:HandoffFunctionsNodeVersion = '22'
+
+function Get-HandoffFunctionAppCreateArguments {
+    # The 'az functionapp create' arguments for a NEW handoff Function app.
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$ResourceGroup,
+        [Parameter(Mandatory)][string]$StorageAccount,
+        [Parameter(Mandatory)][string]$Location
+    )
+    @('functionapp', 'create', '--name', $Name, '--resource-group', $ResourceGroup,
+        '--storage-account', $StorageAccount, '--consumption-plan-location', $Location,
+        '--runtime', 'node', '--runtime-version', $script:HandoffFunctionsNodeVersion,
+        '--functions-version', '4', '--os-type', 'Linux', '--assign-identity', '[system]',
+        '--tags', 'app=zava-ccaas-demo')
+}
+
+function Get-HandoffRuntimeCheck {
+    # Compares an EXISTING app's reported runtime with the one this installer creates.
+    # Read-only: it only describes the explicit command an owner may choose to run.
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$ResourceGroup,
+        [AllowEmptyString()][AllowNull()][string]$LinuxFxVersion
+    )
+    $expected = "node|$script:HandoffFunctionsNodeVersion"
+    $actual = ([string]$LinuxFxVersion).Trim()
+    $setCommand = "az functionapp config set --name '$Name' --resource-group '$ResourceGroup' --linux-fx-version `"$expected`""
+    if ($actual -ieq $expected) {
+        return [pscustomobject]@{ Status = 'Match'; Expected = $expected; Actual = $actual; Message = "runtime '$actual'" }
+    }
+    if (-not $actual) {
+        return [pscustomobject]@{
+            Status = 'Unknown'; Expected = $expected; Actual = ''
+            Message = "Could not read the Linux runtime of existing Function app '$Name' (it may use another hosting plan). The installer did not change it. Check it with: az functionapp config show --name '$Name' --resource-group '$ResourceGroup' --query linuxFxVersion -o tsv"
+        }
+    }
+    [pscustomobject]@{
+        Status = 'Mismatch'; Expected = $expected; Actual = $actual
+        Message = "Existing Function app '$Name' reports runtime '$actual'. New installs use '$expected': Node.js 22 is the last Node.js version Microsoft supports on the Linux Consumption plan. The installer did not change this app. If it is on Linux Consumption and you decide to move it, do so deliberately when no run is in progress: $setCommand ; then republish the code (install step 6.3) and repeat the checks on install page 7."
+    }
+}
+
+function Confirm-HandoffFunctionApp {
+    # Creates the handoff Function app if it is missing; otherwise keeps it as it is and
+    # reports its runtime. Never changes an existing app's runtime.
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$ResourceGroup,
+        [Parameter(Mandatory)][string]$StorageAccount,
+        [Parameter(Mandatory)][string]$Location
+    )
+    $fnExists = (& az functionapp show --name $Name --resource-group $ResourceGroup --query id -o tsv 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $fnExists) {
+        Write-Host "  [ok]   function app '$Name' exists"
+        if ($PSCmdlet.ShouldProcess($Name, 'Ensure system-assigned identity')) {
+            Invoke-Native -File 'az' -Arguments @('functionapp', 'identity', 'assign', '--name', $Name, '--resource-group', $ResourceGroup) -Action 'ensure managed identity' -AllowNonZero | Out-Null
+        }
+        $fx = (& az functionapp config show --name $Name --resource-group $ResourceGroup --query linuxFxVersion -o tsv 2>$null)
+        if ($LASTEXITCODE -ne 0) { $fx = '' }
+        $check = Get-HandoffRuntimeCheck -Name $Name -ResourceGroup $ResourceGroup -LinuxFxVersion ([string]$fx)
+        if ($check.Status -eq 'Match') { Write-Host "  [ok]   $($check.Message)" }
+        else { Write-Warning $check.Message }
+        return $check
+    }
+    if ($PSCmdlet.ShouldProcess($Name, "Create Function app in $Location (Linux Consumption, Node.js $script:HandoffFunctionsNodeVersion)")) {
+        Invoke-Native -File 'az' -Arguments (Get-HandoffFunctionAppCreateArguments -Name $Name -ResourceGroup $ResourceGroup -StorageAccount $StorageAccount -Location $Location) -Action "create function app '$Name'" | Out-Null
+        return [pscustomobject]@{ Status = 'Created'; Expected = "node|$script:HandoffFunctionsNodeVersion"; Actual = "node|$script:HandoffFunctionsNodeVersion"; Message = 'created' }
+    }
+    [pscustomobject]@{ Status = 'Planned'; Expected = "node|$script:HandoffFunctionsNodeVersion"; Actual = ''; Message = 'preview only' }
+}
+
 function New-DemoHandoffOrchestrator {
     <#
         Deploys the Azure Functions handoff service (apps/handoff-orchestrator).
@@ -678,8 +754,9 @@ function New-DemoHandoffOrchestrator {
         Idempotent and -WhatIf-safe.
 
         Creates (or reuses) the resource group, a Storage account (Durable backing
-        store), the Function app (Linux consumption, Node 24, Functions v4, with a
-        system-assigned managed identity), and a Key Vault (access-policy mode for
+        store), the Function app (Linux consumption, Node 22, Functions v4, with a
+        system-assigned managed identity; an existing app's runtime is reported, never
+        changed), and a Key Vault (access-policy mode for
         deterministic identity grants for older settings), publishes the code, and
         restarts the app.
 
@@ -757,23 +834,9 @@ function New-DemoHandoffOrchestrator {
         }
     }
 
-    # 3) Function app (Linux consumption, Node 24, Functions v4, system-assigned MI).
-    #    Node 24 is required: Azure rejects new Function apps on Node 20 (EOL 2026-04-30).
-    $fnExists = (& az functionapp show --name $fn --resource-group $rg --query id -o tsv 2>$null)
-    if ($LASTEXITCODE -eq 0 -and $fnExists) {
-        Write-Host "  [ok]   function app '$fn' exists"
-        if ($PSCmdlet.ShouldProcess($fn, 'Ensure system-assigned identity')) {
-            Invoke-Native -File 'az' -Arguments @('functionapp', 'identity', 'assign', '--name', $fn, '--resource-group', $rg) -Action 'ensure managed identity' -AllowNonZero | Out-Null
-        }
-        # Idempotently bring an app previously created on an EOL Node runtime up to
-        # Node 24. Best-effort: a failure here must never block the build.
-        if ($PSCmdlet.ShouldProcess($fn, 'Ensure Node 24 runtime')) {
-            Invoke-Native -File 'az' -Arguments @('functionapp', 'config', 'set', '--name', $fn, '--resource-group', $rg, '--linux-fx-version', 'node|24') -Action 'ensure Node 24 runtime' -AllowNonZero | Out-Null
-        }
-    }
-    elseif ($PSCmdlet.ShouldProcess($fn, "Create Function app in $loc")) {
-        Invoke-Native -File 'az' -Arguments @('functionapp', 'create', '--name', $fn, '--resource-group', $rg, '--storage-account', $sa, '--consumption-plan-location', $loc, '--runtime', 'node', '--runtime-version', '24', '--functions-version', '4', '--os-type', 'Linux', '--assign-identity', '[system]', '--tags', 'app=zava-ccaas-demo') -Action "create function app '$fn'" | Out-Null
-    }
+    # 3) Function app (Linux Consumption, Node 22, Functions v4, system-assigned MI).
+    #    An existing app is kept as it is; a different runtime is reported, not changed.
+    Confirm-HandoffFunctionApp -Name $fn -ResourceGroup $rg -StorageAccount $sa -Location $loc | Out-Null
 
     # 4) Key Vault (access-policy mode = deterministic identity grants regardless of
     #    tenant RBAC defaults). Recover a soft-deleted vault of the same name if present.

@@ -55,6 +55,19 @@ pwsh -File .\scripts\Build-DemoFromScratch.ps1 -ConfigPath .\scripts\demo-config
 
 Record the printed **CCaaS web app** URL (the Zava site) and **Handoff API** URL in the worksheet. Do not pass `-IncludeFoundryAgent`: it runs the retired `Deploy-Agent.ps1` (assistants / `computer-use-preview`) helper, which is not part of this install.
 
+Function app runtime: a new Function app is created on the Linux Consumption plan with
+**Node.js 22**, the last Node.js version Microsoft supports on that plan
+([supported languages](https://learn.microsoft.com/azure/azure-functions/supported-languages#languages-by-runtime-version)).
+The handoff service's unit tests pass on Node.js 22. If the Function app already exists, the
+helper does not change its runtime: it prints the runtime it found and, if that is not
+`node|22`, a warning with the exact `az functionapp config set ... --linux-fx-version "node|22"`
+command. Run that command only if you decide to, when no run is in progress, then republish the
+code (step 6.3) and repeat the checks on page 7. Read-only check:
+
+```powershell
+az functionapp config show --name <function-app-name> --resource-group <resource-group> --query linuxFxVersion -o tsv   # new installs print node|22 (letter case may differ)
+```
+
 Microsoft Azure Functions reference: <https://learn.microsoft.com/en-us/azure/azure-functions/functions-create-function-app-portal>
 Microsoft Static Web Apps reference: <https://learn.microsoft.com/en-us/azure/static-web-apps/getting-started>
 
