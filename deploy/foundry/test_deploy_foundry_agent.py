@@ -50,7 +50,9 @@ class FakeAgents:
         return _Obj({"version": "1", "status": "active"})
 
     def get_version(self, name, version):
-        return _Obj({"status": "active"})
+        return _Obj({"status": self.version_status.get(version, "active")})
+
+    version_status: dict = {}
 
     def update_details(self, name, agent_endpoint):
         self.endpoint = (name, agent_endpoint)
@@ -82,13 +84,19 @@ def fake_sdk(agents: FakeAgents) -> dict[str, types.ModuleType]:
     models.HostedAgentDefinition = lambda **kw: kw
 
     # Keyword-only, like azure-ai-projects 2.7.0: an unknown keyword such as `protocols` fails.
-    def endpoint_config(*, protocol_configuration=None, authorization_schemes=None):
-        return {"protocol_configuration": protocol_configuration, "authorization_schemes": authorization_schemes}
+    def endpoint_config(*, protocol_configuration=None, authorization_schemes=None, version_selector=None):
+        config = {"protocol_configuration": protocol_configuration, "authorization_schemes": authorization_schemes}
+        if version_selector is not None:
+            config["version_selector"] = version_selector
+        return config
 
     models.AgentEndpointConfig = endpoint_config
     models.ProtocolConfiguration = lambda *, invocations=None: {"invocations": invocations}
     models.InvocationsProtocolConfiguration = lambda: "invocations"
     models.EntraAuthorizationScheme = lambda: "entra"
+    models.VersionSelector = lambda *, version_selection_rules: {"version_selection_rules": version_selection_rules}
+    models.FixedRatioVersionSelectionRule = lambda *, agent_version, traffic_percentage: {
+        "type": "FixedRatio", "agent_version": agent_version, "traffic_percentage": traffic_percentage}
     identity = types.ModuleType("azure.identity")
     identity.AzureCliCredential = FakeCredential
     exceptions = types.ModuleType("azure.core.exceptions")
@@ -156,6 +164,41 @@ class ConfigureEndpointTests(unittest.TestCase):
         self.assertEqual(name, "claims-w365")
         self.assertEqual(endpoint["protocol_configuration"], {"invocations": "invocations"})
         self.assertEqual(endpoint["authorization_schemes"], ["entra"])
+
+    def test_without_a_pin_the_endpoint_keeps_the_service_default(self):
+        agents = FakeAgents(existing={"instance_identity": {"client_id": "live-id"}})
+        with mock.patch.dict(sys.modules, fake_sdk(agents)):
+            dfa.configure_endpoint(dict(CONFIG))
+        self.assertNotIn("version_selector", agents.endpoint[1])
+
+    def test_pin_sends_all_traffic_to_one_active_version(self):
+        agents = FakeAgents(existing={"instance_identity": {"client_id": "live-id"}})
+        with mock.patch.dict(sys.modules, fake_sdk(agents)):
+            result = dfa.configure_endpoint(dict(CONFIG), "3")
+        self.assertEqual(result["pinnedVersion"], "3")
+        self.assertEqual(agents.endpoint[1]["version_selector"], {"version_selection_rules": [
+            {"type": "FixedRatio", "agent_version": "3", "traffic_percentage": 100}]})
+        self.assertEqual(agents.endpoint[1]["authorization_schemes"], ["entra"])
+
+    def test_pin_to_a_version_that_is_not_active_changes_nothing(self):
+        agents = FakeAgents(existing={"instance_identity": {"client_id": "live-id"}})
+        agents.version_status = {"4": "failed"}
+        with mock.patch.dict(sys.modules, fake_sdk(agents)), self.assertRaises(SystemExit):
+            dfa.configure_endpoint(dict(CONFIG), "4")
+        self.assertFalse(hasattr(agents, "endpoint"))
+
+    def test_pin_keywords_match_the_installed_sdk(self):
+        try:
+            from azure.ai.projects.models import (
+                AgentEndpointConfig,
+                FixedRatioVersionSelectionRule,
+                VersionSelector,
+            )
+        except ImportError:
+            self.skipTest("azure-ai-projects is not installed")
+        config = AgentEndpointConfig(version_selector=VersionSelector(version_selection_rules=[
+            FixedRatioVersionSelectionRule(agent_version="3", traffic_percentage=100)])).as_dict()
+        self.assertEqual(config["version_selector"]["version_selection_rules"][0]["agent_version"], "3")
 
     def test_keywords_match_the_installed_sdk(self):
         try:

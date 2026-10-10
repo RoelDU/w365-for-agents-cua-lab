@@ -188,7 +188,10 @@ def deploy_version(config: dict[str, Any], definition: dict[str, Any]) -> dict[s
                     "agentExistedBefore": current is not None}
 
 
-def configure_endpoint(config: dict[str, Any]) -> dict[str, Any]:
+def configure_endpoint(config: dict[str, Any], pin_version: str | None = None) -> dict[str, Any]:
+    """Invocations + Entra authorization. With pin_version, all traffic goes to that one version
+    instead of the default @latest, so a later create_version receives no traffic until the
+    endpoint is pinned to it (and rolling back is pinning the previous version again)."""
     try:
         from azure.ai.projects import AIProjectClient
         from azure.ai.projects.models import (
@@ -207,12 +210,21 @@ def configure_endpoint(config: dict[str, Any]) -> dict[str, Any]:
     agent = str(config["agentName"])
     with AzureCliCredential(tenant_id=tenant, process_timeout=45) as credential:
         with AIProjectClient(endpoint=endpoint, credential=credential, allow_preview=True, connection_timeout=30, read_timeout=90, retry_total=0) as project:
-            config_obj = AgentEndpointConfig(
-                protocol_configuration=ProtocolConfiguration(invocations=InvocationsProtocolConfiguration()),
-                authorization_schemes=[EntraAuthorizationScheme()],
-            )
-            updated = project.agents.update_details(agent, agent_endpoint=config_obj).as_dict()
-            return {"updated": updated}
+            settings: dict[str, Any] = {
+                "protocol_configuration": ProtocolConfiguration(invocations=InvocationsProtocolConfiguration()),
+                "authorization_schemes": [EntraAuthorizationScheme()],
+            }
+            if pin_version:
+                from azure.ai.projects.models import FixedRatioVersionSelectionRule, VersionSelector
+
+                status = project.agents.get_version(agent, pin_version).as_dict().get("status")
+                if status != "active":
+                    raise SystemExit(f"Version {pin_version} of '{agent}' is {status!r}, not active; the endpoint was not changed.")
+                settings["version_selector"] = VersionSelector(
+                    version_selection_rules=[FixedRatioVersionSelectionRule(agent_version=pin_version, traffic_percentage=100)]
+                )
+            updated = project.agents.update_details(agent, agent_endpoint=AgentEndpointConfig(**settings)).as_dict()
+            return {"updated": updated, "pinnedVersion": pin_version}
 
 
 def main() -> int:
@@ -222,7 +234,10 @@ def main() -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--deploy-version", action="store_true")
     parser.add_argument("--configure-endpoint", action="store_true")
+    parser.add_argument("--pin-version", help="With --configure-endpoint: send all traffic to this version instead of @latest.")
     args = parser.parse_args()
+    if args.pin_version and not args.configure_endpoint:
+        parser.error("--pin-version needs --configure-endpoint")
 
     config = load_config(args.config)
     image = image_from_config(config, args.image_digest)
@@ -233,7 +248,7 @@ def main() -> int:
     if args.deploy_version:
         receipt["deployment"] = deploy_version(config, definition)
     if args.configure_endpoint:
-        receipt["endpoint"] = configure_endpoint(config)
+        receipt["endpoint"] = configure_endpoint(config, args.pin_version)
 
     out = receipt_path(config, action, args.out)
     write_receipt(out, receipt)

@@ -240,11 +240,29 @@ az rest --method get --resource https://ai.azure.com `
 
 `status` must be `active` and `image` must end with the digest from 5.3.
 
-Rollback: Foundry keeps earlier versions and the endpoint serves the latest one. The fastest
+Rollback: Foundry keeps earlier versions. The fastest
 stop needs no redeploy: set the relay's `FOUNDRY_CLAIMS_READY=0` (page 6, step 6.2), and Zava no
-longer starts Foundry transfers. To change the agent itself, put the earlier `imageDigest` or
-both gates `no` back in the local config and run 5.4 and 5.5 again; that adds a new version
-with those settings.
+longer starts Foundry transfers.
+
+**Updating an agent that is already in use.** By default the endpoint serves the newest version
+(`@latest`), so a new version would take every new run the moment it is created. To control the
+switch instead, pin the endpoint to the version in use *before* creating the new one, then pin
+the new one when no run is in progress:
+
+```powershell
+# 1. Keep all traffic on the current version (here 2) while the new one is created.
+pwsh -File .\deploy\foundry\Deploy-FoundryAgent.ps1 -ConfigPath .\deploy\foundry\foundry-agent.local.json `
+  -Python $foundryPython -ConfigureEndpoint -PinVersion 2
+# 2. Build and create the new version (5.3-5.5). It receives no traffic yet.
+# 3. With no claim running, send all traffic to the new version (here 3).
+pwsh -File .\deploy\foundry\Deploy-FoundryAgent.ps1 -ConfigPath .\deploy\foundry\foundry-agent.local.json `
+  -Python $foundryPython -ConfigureEndpoint -PinVersion 3
+```
+
+`-PinVersion` changes only which version serves the endpoint; it refuses a version that is not
+`active`. Rolling back is pinning the previous version again, which is immediate and needs no
+build. Once pinned, the read-only check above shows the newest version, not necessarily the one
+serving; the endpoint's `agent_endpoint.version_selector` shows that.
 
 ## 5.6 Configure the Invocations endpoint
 

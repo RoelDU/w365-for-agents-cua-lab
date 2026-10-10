@@ -17,6 +17,8 @@ param(
     [switch]$RenderDefinition,
     [switch]$DeployVersion,
     [switch]$ConfigureEndpoint,
+    # With -ConfigureEndpoint: send all traffic to this version instead of @latest.
+    [string]$PinVersion,
     [string]$Python = "python"
 )
 
@@ -47,6 +49,7 @@ function Show-Plan {
     Write-Host "  -BuildImage         runs az acr build on a temporary copy of only the files the Dockerfile uses."
     Write-Host "  -DeployVersion      creates a new hosted-agent version."
     Write-Host "  -ConfigureEndpoint  updates the agent endpoint to Invocations + Entra auth."
+    Write-Host "  -PinVersion N       (with -ConfigureEndpoint) all traffic to version N instead of @latest."
 }
 
 if ($Plan -or (-not ($BuildImage -or $RenderDefinition -or $DeployVersion -or $ConfigureEndpoint))) {
@@ -122,7 +125,9 @@ if ($DeployVersion -and -not $PSCmdlet.ShouldProcess("agent '$($config.agentName
     $DeployVersion = $false
     Write-Host "Not creating a hosted agent version (preview or declined)." -ForegroundColor Yellow
 }
-if ($ConfigureEndpoint -and -not $PSCmdlet.ShouldProcess("agent '$($config.agentName)' in $($config.foundryProjectEndpoint)", "Set the agent endpoint to Invocations with Entra authorization")) {
+if ($PinVersion -and -not $ConfigureEndpoint) { throw "-PinVersion needs -ConfigureEndpoint." }
+$endpointAction = if ($PinVersion) { "Set the agent endpoint to Invocations with Entra authorization, all traffic to version $PinVersion" } else { "Set the agent endpoint to Invocations with Entra authorization" }
+if ($ConfigureEndpoint -and -not $PSCmdlet.ShouldProcess("agent '$($config.agentName)' in $($config.foundryProjectEndpoint)", $endpointAction)) {
     $ConfigureEndpoint = $false
     Write-Host "Not changing the agent endpoint (preview or declined)." -ForegroundColor Yellow
 }
@@ -135,6 +140,7 @@ if ($RenderDefinition -or $DeployVersion -or $ConfigureEndpoint -or $BuildImage)
     $pyArgs = @("deploy\foundry\deploy_foundry_agent.py", "--config", $configFull, "--image-digest", $imageDigest)
     if ($DeployVersion) { $pyArgs += "--deploy-version" }
     if ($ConfigureEndpoint) { $pyArgs += "--configure-endpoint" }
+    if ($ConfigureEndpoint -and $PinVersion) { $pyArgs += @("--pin-version", $PinVersion) }
     & $Python @pyArgs
     if ($LASTEXITCODE -ne 0) { throw "Foundry deployment helper failed." }
 }
