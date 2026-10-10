@@ -17,6 +17,15 @@ platform supports different agent-building choices.
 *Conceptual illustration ([SVG source](docs/media/w365-agents-concept.svg),
 [PNG](docs/media/w365-agents-concept.png)); not a product screenshot.*
 
+## Start here
+
+1. **Watch the demo** (8 minutes, English, captions available): [demo video](#demo-video).
+2. **Check the [prerequisites](docs/install/01-prerequisites.md)** for both agent paths.
+3. **Install** in your own tenant with the [install guide](docs/install/README.md): download the
+   ZIP and run the guided setup, `scripts\Install-Lab.ps1`.
+4. **Present** the demo with the [presenting guide](docs/install/presenting.md); a presenter needs
+   only a browser.
+
 ## Agentic AI, computer use and Windows 365 for Agents
 
 An **agent** receives a goal, uses a model to decide the next step, calls a tool to carry it out,
@@ -88,14 +97,18 @@ Presenter in Zava (Microsoft Entra ID sign-in)
 
 What each path proves about the claim number is described under [Known limitations](#known-limitations).
 
-### Demo video (historical)
+### Demo video
 
-https://github.com/user-attachments/assets/10913efc-8abc-475b-8674-12b46245edfa
+[![Watch the demo (8 minutes): a Zava call is transferred to the Foundry agent, which files the claim in the Claims app on a Windows 365 for Agents Cloud PC.](docs/media/demo-video-2026-10.jpg)](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/v2026.10.0/w365-agents-zava-demo-en-2026-10.mp4)
 
-This 2.5-minute walkthrough was recorded in June 2026 and shows the **Copilot Studio** path
-(English). Japanese:
-[`zava-ccaas-demo-guided-ja.mp4`](apps/ccaas-agent-desktop/docs/media/zava-ccaas-demo-guided-ja.mp4?raw=1).
-The Foundry path and the current transfer screens are newer than the recording.
+**[Watch or download the demo video](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/v2026.10.0/w365-agents-zava-demo-en-2026-10.mp4)** (MP4, 8 minutes, English) ·
+[captions (SRT)](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/v2026.10.0/w365-agents-zava-demo-en-2026-10.srt) · [release v2026.10.0](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/tag/v2026.10.0)
+
+Recorded on 10 October 2026 in the author's reference environment, with AI-generated narration.
+It shows a live Zava transfer to the **Foundry** agent filing a claim on a Windows 365 for Agents
+Cloud PC, then Agent 365, Intune, Copilot Studio (with an earlier, separate Copilot Studio run and
+its screenshot history) and the Foundry agent with its source. Some waiting time is shortened, as
+labelled in the video. All data is synthetic.
 
 ## What this repository provides
 
@@ -155,6 +168,11 @@ needs; it needs no checkout or developer tools.
   ([install section 4.6](docs/install/05-mcs-path.md#46-native-run-history-in-copilot-studio-activity)).
   Earlier runs were not added to that history, and no equivalent screenshot history has been
   established for the Foundry path.
+- **Demonstrated** in the same environment on 10 October 2026, with the Foundry agent's start-up
+  wait (see [how the Foundry agent runs](samples/foundry-hosted-claims/docs/how-it-runs.md#the-start-up-wait-before-any-input)):
+  a Zava transfer to Foundry filed a claim, returned the claim number to the same interaction and
+  released the Cloud PC. That run is the one in the [demo video](#demo-video); Foundry shows its
+  runtime log in the portal (Agents > the agent > Traces > Session view), without screenshots.
 - **Not demonstrated:** a fresh installation in a different tenant, whether by following the
   guide or with the guided setup (which has been tested offline against a simulated tenant only).
   Each step reads your tenant before it changes anything, but expect to adapt names, regions and
@@ -190,8 +208,10 @@ needs; it needs no checkout or developer tools.
   orchestrator and the local Foundry runner (`samples\foundry-w365a-runner`) were removed; do not
   follow older instructions that mention them.
 - **Historical documents:** `docs\CCaaS-Demo-Setup-Guide.docx` (May 2026) describes the retired
-  local-orchestrator design. `docs\Zava-CCaaS-Demo.pptx` is the June 2026 overview deck. Use
-  this README and `docs\install` for the current design.
+  local-orchestrator design. `docs\Zava-CCaaS-Demo.pptx` is the June 2026 overview deck. The two
+  June 2026 videos in `apps\ccaas-agent-desktop\docs\media` (English and Japanese) show the
+  earlier Copilot Studio-only version; they are not versions of the current demo video. Use this
+  README and `docs\install` for the current design.
 
 ## Third-party components
 

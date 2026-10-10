@@ -57,11 +57,9 @@ account only. Nothing is installed without asking.
 
 ## Step 1: Get the files
 
-1. Download the lab as a ZIP file:
-   - **While this version is under review**, use the review branch:
-     <https://github.com/RoelDU/w365-for-agents-cua-lab/archive/refs/heads/release/zava-two-backend.zip>
-   - After it is merged, use **Code > Download ZIP** on
-     <https://github.com/RoelDU/w365-for-agents-cua-lab>.
+1. Download the lab as a ZIP file: open <https://github.com/RoelDU/w365-for-agents-cua-lab>,
+   select the green **Code** button, then **Download ZIP**. (Direct link:
+   <https://github.com/RoelDU/w365-for-agents-cua-lab/archive/refs/heads/main.zip>.)
 2. Before extracting, right-click the ZIP file, choose **Properties**, tick **Unblock** if it is
    shown, and select **OK**. Windows otherwise treats every script in it as downloaded from the
    internet and refuses to run it.

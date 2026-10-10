@@ -67,32 +67,31 @@ opened, with the service's reason (redacted as described below).
 
 ## The start-up wait before any input
 
-On a new Cloud PC, Windows 365 itself can open a browser window shortly after the session starts.
-Microsoft Defender's process records for every Foundry Cloud PC (2–10 October 2026) show the
-Windows 365 tool server (`DesktopControl.Mcp.exe`) starting a remote-controlled Edge window
-(`about:blank`) in about half of the sessions, 21–27 seconds after that server starts. That is
-14–17 seconds after Start Session returned in the affected runs, whatever the agent was doing at
-the time. The window comes to the front within a few seconds. In REQ-2026-693651046301 it did so
-just as the policy number was being pasted, and received it. The agent never asked for that
-window: it uses no browser tools.
+On a new Cloud PC, the Windows 365 computer-use service can itself open a remote-controlled Edge
+window (`about:blank`) shortly after the session starts, whatever the agent is doing; the agent
+uses no browser tools. In the reference environment this happened in about half of the sessions,
+up to roughly 21 seconds after Start Session returned, and the window came to the front a few
+seconds later. Windows 365 typing pastes into whichever window is in front, so text sent at that
+moment can land in Edge.
 
-So in the `claims` operation nothing is clicked or typed until 27 seconds after Start Session
-returned. That bound covers every case in those records, plus the time the window takes to come
-forward.
+So in the `claims` operation nothing is clicked or typed until **27 seconds** after Start Session
+returned.
 
-- The wait runs while the model plans its first step. Before this change, the first input came
-  14–26 seconds after Start Session returned, so the wait adds up to about 13 seconds.
-- The viewer shows a plan message saying how long the wait is.
+- The wait runs while the model plans its first step; it delays the first input by up to about
+  13 seconds compared with starting straight away. The viewer shows a plan message with its length.
 - About once a second the agent reads which window is in front. If another window is in front, it
-  asks for Claims to be brought back, at most twice. It never clicks, types into, closes or signs
-  into the other window.
+  asks for Claims to be brought back and confirms that it is, at most twice. It never clicks, types
+  into, closes or signs into the other window.
 - At the end of the wait it reads the full Claims screen. Input starts only if Claims is in front.
   If that screen differs from the one the model planned on, the model's first step is not sent; the
   model is shown the screen as it is now.
 - If the other window will not leave, the run stops with nothing clicked or typed and no Submit
   sent, and the Cloud PC is released.
 
-The checks around each typing step (below) remain in place for anything else that comes forward.
+**Limitation.** The 27 seconds is a mitigation chosen from what was observed in one environment,
+not a timing that Windows 365 documents or guarantees. The service's behaviour can change. The
+checks around each typing step (below) stay in place for anything that comes forward later; if
+that happens during a paste, the run still stops safely with no Submit sent.
 
 ## When Windows 365 rejects a tool call
 
@@ -159,8 +158,7 @@ checks and performs them.
   then shows exactly the typed text.
 - It never types into a field that already holds other text.
 - Windows 365 typing pastes into whichever window has keyboard focus; it cannot be aimed at a
-  window or field. So around every typing step the loop checks that Claims is the window in front
-  (REQ-2026-693651046301: an Edge window came forward and received the policy number):
+  window or field. So around every typing step the loop checks that Claims is the window in front:
   - Before clicking the field it reads the screen again. If another window is in front, it asks
     once for Claims to be brought back and waits to see it in front; it never clicks, types into
     or closes the other window. If the field changed meanwhile, the model is told and shown the
@@ -172,8 +170,8 @@ checks and performs them.
     from Claims. Exactly the typed text is accepted; anything else stops the run. The text is never
     typed a second time, because it may already be in the other window.
   - A window that comes forward during the paste itself cannot be caught in time by these checks.
-    The start-up wait above prevents the known cause. Anything else still ends in that safe stop,
-    with no Submit sent.
+    The start-up wait above addresses the cause seen so far; anything else still ends in that safe
+    stop, with no Submit sent.
 - New FNOL is not opened until the Policy tab shows the requested policy (or caller phone).
 - Until then, the newest screen (and any refused New FNOL) carries a short application check:
   - what the Policy tab's own field shows;
@@ -267,7 +265,8 @@ Several safeguards above exist because of specific runs in the reference environ
 
 | What happened | Safeguard that followed |
 | --- | --- |
-| In REQ-2026-576139834574 a tool call was rejected seconds after Start Session. From the timing it was inferred, not proven, to be the first screen read after readiness. | Screen reads rejected during the start-up check are shown and retried within the same 30 seconds. |
+| A tool call was rejected seconds after Start Session; from the timing it was probably, not provably, the first screen read after readiness. | Screen reads rejected during the start-up check are shown and retried within the same 30 seconds. |
+| A browser window that Windows 365 opened shortly after start-up came to the front while the policy number was being pasted, and received it. | The start-up wait, and the foreground checks around each typing step. |
 | Typing without a named field landed in the hidden FNOL narrative, and the search ran empty. | Typing must name its field, is checked afterwards, and never goes into a field holding other text. |
 | The model took its typed search text for a selected policy, tried New FNOL five times and clicked an empty result list twice before pressing Search. | The Policy tab application check, and New FNOL refused until the policy is shown. |
 | A run reported "not found" from the empty start screen. | `POLICY_NOT_FOUND` is accepted only after a Search for the requested policy or phone. |
