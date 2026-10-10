@@ -12,3 +12,9 @@ def fresh_process_caches():
     yield
     clear_token_cache()
     clear_discovery_cache()
+
+
+@pytest.fixture(autouse=True)
+def no_startup_settle(monkeypatch):
+    """The real start-up wait is 27 s; tests of it pass settle_seconds explicitly."""
+    monkeypatch.setattr("hosted_claims.engine.SERVICE_BROWSER_SETTLE_SECONDS", 0)

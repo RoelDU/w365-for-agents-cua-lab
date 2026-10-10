@@ -7,6 +7,7 @@ match selects that customer's policy, and Submit refuses when no policy is selec
 """
 
 import json
+from pathlib import Path
 
 from test_lifecycle import Cloud, result
 
@@ -14,6 +15,9 @@ POLICY = "POL-2024-008341"
 PHONE = "(555) 123-4567"
 CLAIM_ID = "CLM-2026-000221"
 VALUE_CAP = 256  # Run F: the tree cut the review text at 256 characters without flagging it.
+# The foreground tree Windows 365 returned when Edge covered Claims in REQ-2026-693651046301
+# (10 Oct 2026, status event 37), saved unchanged apart from the CorrelationId line.
+EDGE = json.loads((Path(__file__).parent / "run_693651046301_edge.json").read_text("utf-8"))
 STEPS = (
     "Step 1 of 5  -  Incident",
     "Step 2 of 5  -  Vehicles / Property",
@@ -45,6 +49,18 @@ class ClaimsApp(Cloud):
         self.actions = []
         self.submit_requests = 0
         self.claims = []
+        # Another window (Edge) in front of Claims: reads return its tree, and clicks, keys and
+        # text go to it, not to Claims. cover_when(calls_so_far, name, args) brings it to the
+        # front once, just before that call runs; activate_window for Claims sends it back
+        # unless cover_stays.
+        self.calls = []
+        self.cover = None
+        self.cover_when = None
+        self.cover_stays = False
+        self.cover_input = []
+
+    def root(self, tree):
+        return {**tree, "processName": "claims"}
 
     def review(self):
         lines = ["FIRST NOTICE OF LOSS - DRAFT", "----------------------------"]
@@ -203,12 +219,23 @@ class ClaimsApp(Cloud):
 
     async def call(self, name, arguments):
         assert arguments["sessionId"] == "pc-session-1"
+        args = {k: v for k, v in arguments.items() if k != "sessionId"}
+        if self.cover_when and self.cover_when(self.calls, name, args):
+            self.cover, self.cover_when = EDGE, None
+        self.calls.append((name, args))
         if name == "get_accessibility_tree":
             self.reads += 1
-            return result(json.dumps(self.tree()) + f" CorrelationId: read-{self.reads}")
-        args = {k: v for k, v in arguments.items() if k != "sessionId"}
+            tree = self.cover or self.root(self.tree())
+            return result(json.dumps(tree) + f" CorrelationId: read-{self.reads}")
         self.actions.append((name, args))
-        if name == "click":
+        if name == "activate_window":
+            if args.get("title") == "Claims Workstation" and not self.cover_stays:
+                self.cover = None
+        elif self.cover is not None:
+            self.cover_input.append((name, args))
+            if name == "type_text":
+                return result(f"Pasted {len(args['text'])} characters CorrelationId: act")
+        elif name == "click":
             self.click(args["x"], args["y"])
         elif name == "press_keys":
             self.press([str(k).lower() for k in args["keys"]])

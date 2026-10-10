@@ -29,6 +29,17 @@ DESKTOP_SETUP_GRACE_SECONDS = 30
 WINDOW_TIMEOUT_SECONDS = 15
 CLAIMS_TIMEOUT_SECONDS = 15 * 60
 CLAIMS_WINDOW = "Claims Workstation"
+# Microsoft Defender process records for every Foundry Cloud PC, 2-10 Oct 2026: in about half the
+# sessions the Windows 365 tool server itself (DesktopControl.Mcp.exe) starts a remote-controlled
+# Edge window (about:blank) 21.3-26.9 s after it starts, whatever this agent is doing. It starts at
+# least 5.5 s before Start Session returns here, so that Edge starts at most ~21.4 s after the
+# return, and it takes the front within ~4 s. In REQ-2026-693651046301 it did so 14.7 s after the
+# return and received the pasted policy number. Nothing is clicked or typed until this many
+# seconds after Start Session returned, with Claims seen in front; the model plans meanwhile.
+SERVICE_BROWSER_SETTLE_SECONDS = 27
+SETTLE_POLL_SECONDS = 1
+SETTLE_ACTIVATIONS = 2
+ACTIVATION_CONFIRM_READS = 4
 # Only these activate_window rejections are treated as "window not there yet" and retried.
 WINDOW_NOT_FOUND = re.compile(
     r"\bno (matching )?window\b|\bwindow\b[^.\n]{0,60}\bnot found\b|\bnot find\b[^.\n]{0,60}\bwindow\b",
@@ -308,6 +319,39 @@ def submission_note(stage: str, submit_sent: bool) -> str:
     return "The Claims task had not started, so this run sent no Submit Claim."
 
 
+async def activate_claims_window(
+    computer: Computer, session_id: str, emit: Callable[..., None]
+) -> str:
+    """Ask Windows 365 to bring Claims Workstation to the front, once.
+
+    Returns "requested", or "window_not_found" when the reply positively says the window is not
+    there. Any other rejection stops the run; approval-required and guard errors propagate.
+    """
+    emit("tool_started", tool="activate_window", source="tool")
+    value = await computer.call(
+        "activate_window", {"sessionId": session_id, "title": CLAIMS_WINDOW}
+    )
+    if value.is_error:
+        if WINDOW_NOT_FOUND.search(
+            "\n".join(block.text for block in value.content if block.type == "text")
+        ):
+            emit(
+                "tool_failed",
+                tool="activate_window",
+                source="tool",
+                message="The Claims Workstation window was not found yet.",
+            )
+            return "window_not_found"
+        stopped = RunError(
+            "Windows 365 rejected the request to bring Claims Workstation to the front; "
+            "the run stopped without retrying."
+        )
+        stopped.diagnostic = service_diagnostic(value)
+        raise stopped
+    emit("tool_completed", tool="activate_window", source="tool")
+    return "requested"
+
+
 def start_key(request_id: str) -> str:
     return str(uuid5(NAMESPACE_URL, request_id))
 
@@ -329,7 +373,11 @@ async def run(
     setup_poll_interval: float = 5,
     window_timeout: float = WINDOW_TIMEOUT_SECONDS,
     wait_for_viewer: Callable[[], Awaitable[object]] | None = None,
+    settle_seconds: float | None = None,
+    settle_poll_interval: float = SETTLE_POLL_SECONDS,
 ) -> dict[str, Any]:
+    if settle_seconds is None:
+        settle_seconds = SERVICE_BROWSER_SETTLE_SECONDS
     handoff = accept_handoff(handoff, handoff["request_id"])
     if operation not in ("smoke", "claims") or (operation == "claims" and model is None):
         raise ValueError("Operation must be smoke, or claims with a configured model.")
@@ -374,6 +422,7 @@ async def run(
             )
         )
         release_status = "pending"
+        settle_until = asyncio.get_running_loop().time() + settle_seconds
         emit("tool_completed", tool=START, source="tool")
         emit(
             "computer",
@@ -437,30 +486,8 @@ async def run(
             )
 
         async def activate_claims() -> str:
-            # Guard ValueErrors and approval-required RunErrors from the tool layer propagate.
-            emit("tool_started", tool="activate_window", source="tool")
-            value = await computer.call(
-                "activate_window", {"sessionId": session_id, "title": CLAIMS_WINDOW}
-            )
-            if value.is_error:
-                if WINDOW_NOT_FOUND.search(
-                    "\n".join(block.text for block in value.content if block.type == "text")
-                ):
-                    emit(
-                        "tool_failed",
-                        tool="activate_window",
-                        source="tool",
-                        message="The Claims Workstation window was not found yet.",
-                    )
-                    return "window_not_found"
-                stopped = RunError(
-                    "Windows 365 rejected the request to bring Claims Workstation to the front; "
-                    "the run stopped without retrying."
-                )
-                stopped.diagnostic = service_diagnostic(value)
-                raise stopped
-            emit("tool_completed", tool="activate_window", source="tool")
-            return "requested"
+            assert session_id is not None
+            return await activate_claims_window(computer, session_id, emit)
 
         # A Cloud PC that answers get_screen_size can still be in Windows account setup (02d).
         # Confirmed setup gets only a short grace, then a named stop; the check shares the
@@ -555,8 +582,8 @@ async def run(
             },
         )
         tree = None
-        # A window opened at first sign-in (seen live: blank Edge) can stay in front of the
-        # launched Claims window. Request activation once; retry only a reply that positively
+        # Another window can be in front of the launched Claims window (seen live: a blank Edge
+        # window, which Defender records show the Windows 365 tool server opening itself). Request activation once; retry only a reply that positively
         # says the window is not found yet. Anything else (approval required, other rejection,
         # session/guard errors) ends the run through the normal release path.
         activation = "not_needed"
@@ -607,20 +634,112 @@ async def run(
             )
         emit("observation", source="tool", message=tree)
         if operation == "claims":
-            from .claims import perform_claims
+            from .claims import claims_in_front, front_label, perform_claims
 
+            async def settle_desktop() -> str:
+                """Watch the Cloud PC until the settle time, keeping Claims in front; no input.
+
+                Runs while the model plans its first step. Returns a fresh full screen read with
+                Claims in front, or stops the run before anything was clicked or typed.
+                """
+                loop = asyncio.get_running_loop()
+                remaining = settle_until - loop.time()
+                if remaining > 0:
+                    emit(
+                        "plan",
+                        source="application",
+                        message="Claims is open. On a new Cloud PC, Windows 365 can still open "
+                        "its own browser window up to about "
+                        f"{SERVICE_BROWSER_SETTLE_SECONDS} seconds after the session starts, "
+                        f"so nothing is clicked or typed for another {remaining:.0f} seconds. "
+                        "The agent plans its first step meanwhile.",
+                    )
+                activations = 0
+                stopped = "Nothing was clicked or typed and no Submit was sent."
+
+                async def send_back(screen: str) -> None:
+                    nonlocal activations
+                    if activations >= SETTLE_ACTIVATIONS:
+                        raise RunError(
+                            f"{front_label(screen)} kept coming in front of Claims Workstation "
+                            f"while the Cloud PC finished starting. {stopped}"
+                        )
+                    activations += 1
+                    emit(
+                        "check",
+                        source="application",
+                        message=f"{front_label(screen)} came in front of Claims Workstation "
+                        "while the Cloud PC finished starting, before any input. Claims "
+                        "Workstation is being brought back to the front; that window is not "
+                        "used.",
+                    )
+                    if await activate_claims() == "window_not_found":
+                        raise RunError(
+                            f"Claims Workstation could not be found to bring back. {stopped}"
+                        )
+                    # Confirm it took effect before any further request is counted.
+                    pause = min(0.5, settle_poll_interval)
+                    for _ in range(ACTIVATION_CONFIRM_READS):
+                        await asyncio.sleep(pause)
+                        screen = await foreground(2, 50)
+                        if claims_in_front(screen):
+                            return
+                    raise RunError(
+                        f"{front_label(screen)} stayed in front after Claims Workstation was "
+                        f"asked back. {stopped}"
+                    )
+
+                while (remaining := settle_until - loop.time()) > 0:
+                    await asyncio.sleep(min(settle_poll_interval, remaining))
+                    screen = await foreground(2, 50)
+                    if not claims_in_front(screen):
+                        await send_back(screen)
+                screen = await foreground(6, 1000)
+                if not claims_in_front(screen):
+                    await send_back(screen)
+                    screen = await foreground(6, 1000)
+                    if not claims_in_front(screen):
+                        raise RunError(
+                            f"{front_label(screen)} came in front of Claims Workstation again "
+                            f"at the end of the start-up wait. {stopped}"
+                        )
+                emit(
+                    "check",
+                    source="application",
+                    message="The Cloud PC has finished starting and Claims Workstation is in "
+                    "front; input can begin.",
+                )
+                return screen
+
+            settle = (
+                asyncio.create_task(settle_desktop())
+                if settle_seconds > 0
+                else None
+            )
             assert model is not None
             stage = "claims_task"
-            async with asyncio.timeout(CLAIMS_TIMEOUT_SECONDS - gate_seconds):
-                result = await perform_claims(
-                    handoff,
-                    session_id,
-                    computer,
-                    model,
-                    record,
-                    initial=tree,
-                    state=claims_state,
-                )
+            try:
+                async with asyncio.timeout(CLAIMS_TIMEOUT_SECONDS - gate_seconds):
+                    result = await perform_claims(
+                        handoff,
+                        session_id,
+                        computer,
+                        model,
+                        record,
+                        initial=tree,
+                        state=claims_state,
+                        before_first_action=(lambda: settle) if settle else None,
+                    )
+            finally:
+                if settle is not None:
+                    if not settle.done():
+                        settle.cancel()
+                    # Not awaited directly: an outer cancellation must still propagate. The
+                    # wait's own failure already reached perform_claims, which awaits it before
+                    # any action or finish check; otherwise perform_claims failed first.
+                    await asyncio.wait({settle})
+                    if not settle.cancelled():
+                        settle.exception()
             outcome.update(status=result["status"], result=result)
         else:
             outcome["status"] = "smoke_completed"

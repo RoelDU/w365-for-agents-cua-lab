@@ -1110,3 +1110,190 @@ async def test_policy_not_found_after_a_search_that_listed_nothing_is_still_repo
     outcome = await perform_claims(handoff(), "pc-session-1", app, model, lambda e: None)
     assert outcome["status"] == "error" and outcome["error_code"] == "POLICY_NOT_FOUND"
     assert app.submit_requests == 0
+
+
+# REQ-2026-693651046301 (10 Oct 2026): Claims was in front and the search box was clicked; Edge
+# then came to the front and received the pasted policy number; the run stopped safely. These
+# tests bring the saved Edge screen from that run in front of the stand-in Claims app at each
+# moment around typing. Windows 365 type_text cannot be aimed at a window, so Claims must be in
+# front just before the paste, and a field is read back from Claims itself before it is trusted.
+FOCUS_POLICY = ("click", {"x": 138, "y": 168})  # the application's focus click on the search box
+GROUPED = ([RADIO, TYPE_POLICY, SEARCH, NEW_FNOL], [TYPE_LOCATION, TYPE_NARRATIVE, NEXT, NEXT, NEXT, NEXT], [SUBMIT])
+EDGE_NAME = "'about:blank - Work - Microsoft Edge', msedge"
+
+
+@pytest.fixture(autouse=True)
+def no_activation_pause(monkeypatch):
+    monkeypatch.setattr("hosted_claims.claims.ACTIVATION_PAUSE_SECONDS", 0)
+
+
+def read_after(action):
+    """Edge comes to the front at the first screen read after this action."""
+    return lambda calls, name, args: (
+        name == "get_accessibility_tree" and bool(calls) and calls[-1] == action
+    )
+
+
+def before_input(calls, name, args=None):
+    """The read just before input: the second read after the radio click (the model chose from
+    the first, with Claims in front)."""
+    return (
+        name == "get_accessibility_tree" and len(calls) >= 2 and calls[-2] == RADIO
+        and calls[-1][0] == "get_accessibility_tree"
+    )
+
+
+def checks(events):
+    return [e["message"] for e in events if e["type"] == "check"]
+
+
+def assert_filed_once_with_nothing_in_edge(app, outcome):
+    assert outcome["status"] == "submitted" and outcome["claim_id"] == "CLM-2026-000221"
+    assert app.submit_requests == 1 and len(app.claims) == 1
+    assert app.claims[0]["policy"] == "POL-2024-008341"
+    assert app.values["7010"] == "POL-2024-008341"  # typed once, not doubled
+    assert [a for a in app.actions if a[0] == "type_text"] == [
+        ("type_text", {"text": t}) for t in ("POL-2024-008341", "5th and Main", SUMMARY)
+    ]
+    assert app.cover_input == []
+
+
+@pytest.mark.asyncio
+async def test_edge_in_front_before_the_focus_click_brings_claims_back_and_files_once():
+    app = ClaimsApp()
+    # The model chose from a screen with Claims in front; Edge came forward before input.
+    app.cover_when = before_input
+    events = []
+    outcome = await perform_claims(handoff(), "pc-session-1", app, Turns(*GROUPED), events.append)
+    assert_filed_once_with_nothing_in_edge(app, outcome)
+    # Claims was brought back before the search box was clicked; nothing went to Edge.
+    activate = app.actions.index(("activate_window", {"title": "Claims Workstation"}))
+    assert app.actions[activate - 1] == RADIO and app.actions[activate + 1] == FOCUS_POLICY
+    assert f"Another window ({EDGE_NAME}) was in front of Claims Workstation before the field was clicked." in checks(events)[0]
+
+
+@pytest.mark.asyncio
+async def test_edge_in_front_between_focus_click_and_typing_reclicks_in_claims_then_types_once():
+    app = ClaimsApp()
+    app.cover_when = read_after(FOCUS_POLICY)  # the click reached Claims; Edge came up after it
+    events = []
+    outcome = await perform_claims(handoff(), "pc-session-1", app, Turns(*GROUPED), events.append)
+    assert_filed_once_with_nothing_in_edge(app, outcome)
+    typed = app.actions.index(("type_text", {"text": "POL-2024-008341"}))
+    assert app.actions[typed - 3:typed] == [
+        FOCUS_POLICY, ("activate_window", {"title": "Claims Workstation"}), FOCUS_POLICY,
+    ]
+    assert any("after the field was clicked (that click may have reached the other window)" in m
+               for m in checks(events))
+
+
+@pytest.mark.asyncio
+async def test_a_focus_click_that_lands_in_edge_is_disclosed_and_nothing_is_typed_there():
+    app = ClaimsApp()
+    app.cover_when = lambda calls, name, args: (name, args) == FOCUS_POLICY
+    outcome = await perform_claims(handoff(), "pc-session-1", app, Turns(*GROUPED), lambda e: None)
+    assert outcome["claim_id"] == "CLM-2026-000221" and app.submit_requests == 1
+    assert app.values["7010"] == "POL-2024-008341"
+    assert app.cover_input == [FOCUS_POLICY]  # only the one click; no text reached Edge
+
+
+@pytest.mark.asyncio
+async def test_edge_in_front_after_the_text_reached_claims_is_read_back_and_never_retyped():
+    app = ClaimsApp()
+    app.cover_when = lambda calls, name, args: (
+        name == "get_accessibility_tree" and bool(calls) and calls[-1] == ("type_text", {"text": "POL-2024-008341"})
+    )
+    events = []
+    outcome = await perform_claims(handoff(), "pc-session-1", app, Turns(*GROUPED), events.append)
+    assert_filed_once_with_nothing_in_edge(app, outcome)
+    assert (
+        f"Another window ({EDGE_NAME}) came to the front during typing. After Claims Workstation was "
+        "brought back, field 7010 shows exactly the typed text, so it was not typed again."
+    ) in checks(events)
+
+
+@pytest.mark.asyncio
+async def test_run_693651046301_replay_text_pasted_into_edge_stops_without_retyping_or_submit():
+    app = ClaimsApp()
+    app.cover_when = lambda calls, name, args: name == "type_text"  # Edge took focus mid-paste
+    events = []
+    with pytest.raises(Exception) as stopped:
+        await perform_claims(handoff(), "pc-session-1", app, Turns([RADIO, TYPE_POLICY, SEARCH]), events.append)
+    assert str(stopped.value) == (
+        f"Another window ({EDGE_NAME}) came to the front while the text was being typed. After "
+        "Claims Workstation was brought back, field 7010 shows '', so the text may have gone into "
+        "that window. It was not typed again; stopped before filing a claim. No claim was verified."
+    )
+    assert app.cover_input == [("type_text", {"text": "POL-2024-008341"})]
+    assert app.values["7010"] == ""
+    assert [a for a in app.actions if a[0] == "type_text"] == [("type_text", {"text": "POL-2024-008341"})]
+    assert SEARCH not in app.actions and app.submit_requests == 0
+    # As in the live run, Claims was in front at the check made just before the paste.
+    typed = app.calls.index(("type_text", {"text": "POL-2024-008341"}))
+    assert app.calls[typed - 2:typed] == [FOCUS_POLICY, app.calls[typed - 1]]
+    assert app.calls[typed - 1][0] == "get_accessibility_tree"
+
+
+@pytest.mark.asyncio
+async def test_edge_that_stays_in_front_stops_the_run_with_nothing_clicked_or_typed():
+    app = ClaimsApp()
+    app.cover_stays = True
+    app.cover_when = before_input
+    with pytest.raises(Exception, match=r"stayed in front after one request to bring Claims "
+                       r"Workstation back before the field was clicked\. Nothing was typed"):
+        await perform_claims(handoff(), "pc-session-1", app, Turns(*GROUPED), lambda e: None)
+    assert app.cover_input == [] and FOCUS_POLICY not in app.actions
+    assert app.actions.count(("activate_window", {"title": "Claims Workstation"})) == 1
+    assert not [a for a in app.actions if a[0] == "type_text"] and app.submit_requests == 0
+
+
+@pytest.mark.asyncio
+async def test_edge_that_returns_after_claims_was_brought_back_once_stops_before_typing():
+    app = ClaimsApp()
+    app.cover_when = read_after(FOCUS_POLICY)
+    original = app.call
+
+    async def call(name, arguments):  # Edge comes forward again after the second focus click
+        args = {k: v for k, v in arguments.items() if k != "sessionId"}
+        if (name, args) == FOCUS_POLICY and app.actions.count(FOCUS_POLICY) == 1:
+            app.cover_when = lambda calls, n, a: n == "get_accessibility_tree"
+        return await original(name, arguments)
+
+    app.call = call
+    with pytest.raises(Exception, match="came in front of Claims Workstation again after the field "
+                       "was clicked. Nothing was typed"):
+        await perform_claims(handoff(), "pc-session-1", app, Turns(*GROUPED), lambda e: None)
+    assert not [a for a in app.actions if a[0] == "type_text"] and app.cover_input == []
+    assert app.actions.count(("activate_window", {"title": "Claims Workstation"})) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_field_that_changed_while_claims_was_covered_is_refused_with_the_new_screen():
+    app = ClaimsApp()
+
+    def cover(calls, name, args):  # someone typed in the box while Edge was in front
+        if before_input(calls, name):
+            app.values["7010"] = "(555) 123"
+            return True
+        return False
+
+    app.cover_when = cover
+    model = Turns([RADIO, TYPE_POLICY, SEARCH])
+    await perform_claims(handoff(), "pc-session-1", app, model, lambda e: None)
+    assert FOCUS_POLICY not in app.actions and app.values["7010"] == "(555) 123"
+    refused, skipped = outputs(model.seen[1])[-2:]
+    assert refused.startswith("Nothing typed: field 7010 already holds '(555) 123'; typing would add to it.")
+    assert '"automationId":"7010"' in refused and '"value":"(555) 123"' in refused  # the screen now
+    assert skipped.startswith("Not run: an earlier action in this turn was not sent")
+
+
+@pytest.mark.asyncio
+async def test_a_submit_click_that_lands_in_edge_is_never_sent_again():
+    app = ClaimsApp()
+    app.cover_when = lambda calls, name, args: (name, args) == SUBMIT
+    activate = ("activate_window", {"title": "Claims Workstation"})
+    model = Turns(*GROUPED[:2], [SUBMIT], [activate], [SUBMIT])
+    with pytest.raises(Exception, match="A second Submit was requested"):
+        await perform_claims(handoff(), "pc-session-1", app, model, lambda e: None)
+    assert app.cover_input == [SUBMIT] and app.submit_requests == 0
+    assert app.actions.count(SUBMIT) == 1

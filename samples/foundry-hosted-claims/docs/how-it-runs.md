@@ -55,7 +55,7 @@ opened, with the service's reason (redacted as described below).
 ## Opening Claims
 
 - The agent opens the installed Claims Workstation.
-- If another window is in front (for example a browser window opened at first sign-in), it asks
+- If another window is in front (for example the browser window described below), it asks
   once for the Claims window to be activated. It retries only while the service reports that
   the window is not found yet.
 - Activation alone is not success: Claims must then appear in the foreground accessibility tree.
@@ -64,6 +64,35 @@ opened, with the service's reason (redacted as described below).
   values, including whether `list_windows` shows a Claims window.
 - The `smoke` operation then reads the Claims accessibility tree and releases the Cloud PC. It
   never files a claim.
+
+## The start-up wait before any input
+
+On a new Cloud PC, Windows 365 itself can open a browser window shortly after the session starts.
+Microsoft Defender's process records for every Foundry Cloud PC (2–10 October 2026) show the
+Windows 365 tool server (`DesktopControl.Mcp.exe`) starting a remote-controlled Edge window
+(`about:blank`) in about half of the sessions, 21–27 seconds after that server starts. That is
+14–17 seconds after Start Session returned in the affected runs, whatever the agent was doing at
+the time. The window comes to the front within a few seconds. In REQ-2026-693651046301 it did so
+just as the policy number was being pasted, and received it. The agent never asked for that
+window: it uses no browser tools.
+
+So in the `claims` operation nothing is clicked or typed until 27 seconds after Start Session
+returned. That bound covers every case in those records, plus the time the window takes to come
+forward.
+
+- The wait runs while the model plans its first step. Before this change, the first input came
+  14–26 seconds after Start Session returned, so the wait adds up to about 13 seconds.
+- The viewer shows a plan message saying how long the wait is.
+- About once a second the agent reads which window is in front. If another window is in front, it
+  asks for Claims to be brought back, at most twice. It never clicks, types into, closes or signs
+  into the other window.
+- At the end of the wait it reads the full Claims screen. Input starts only if Claims is in front.
+  If that screen differs from the one the model planned on, the model's first step is not sent; the
+  model is shown the screen as it is now.
+- If the other window will not leave, the run stops with nothing clicked or typed and no Submit
+  sent, and the Cloud PC is released.
+
+The checks around each typing step (below) remain in place for anything else that comes forward.
 
 ## When Windows 365 rejects a tool call
 
@@ -129,6 +158,22 @@ checks and performs them.
   clicks that field's centre, types, reads the screen again, and stops the run unless the field
   then shows exactly the typed text.
 - It never types into a field that already holds other text.
+- Windows 365 typing pastes into whichever window has keyboard focus; it cannot be aimed at a
+  window or field. So around every typing step the loop checks that Claims is the window in front
+  (REQ-2026-693651046301: an Edge window came forward and received the policy number):
+  - Before clicking the field it reads the screen again. If another window is in front, it asks
+    once for Claims to be brought back and waits to see it in front; it never clicks, types into
+    or closes the other window. If the field changed meanwhile, the model is told and shown the
+    screen as it is now; nothing is typed.
+  - After the click it reads the screen again. If another window came forward (the click may then
+    have reached it), Claims is brought back once and the field clicked again. Text is sent only
+    when Claims is in front with the field empty in the same place.
+  - If another window is in front after typing, Claims is brought back once and the field read
+    from Claims. Exactly the typed text is accepted; anything else stops the run. The text is never
+    typed a second time, because it may already be in the other window.
+  - A window that comes forward during the paste itself cannot be caught in time by these checks.
+    The start-up wait above prevents the known cause. Anything else still ends in that safe stop,
+    with no Submit sent.
 - New FNOL is not opened until the Policy tab shows the requested policy (or caller phone).
 - Until then, the newest screen (and any refused New FNOL) carries a short application check:
   - what the Policy tab's own field shows;
