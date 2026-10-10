@@ -1,10 +1,21 @@
 Zava CCaaS demo - Intune package manifest
-Generated: 2026-06-17 08:49:13 (build host)
-Source: bigger-font release - claims.exe v1.1.0.0, WGM_UI_SCALE 185, version-aware Detect.ps1
+Checked: 2026-10-08 against the committed files (the package content was decrypted with the
+key in its own Detection.xml and the claims.exe version resource read).
+Source: claims.exe v1.1.1.0 (res\claims.rc), WGM_UI_SCALE 185, version-aware Detect.ps1
 Deploy with: scripts\Deploy-DemoEnvironment.ps1 (WITHOUT -BuildPackages) OR remove+recreate to force content update
 Intune install command:   claims.exe --install
 Intune uninstall command: "%ProgramFiles%\Business Applications\Zava Claims Workstation\claims.exe" --uninstall
-Detection: Detect.ps1 (version-aware, requires v1.1.0.0); 64-bit; Run-as-32-bit = No
+Detection: Detect.ps1 (version-aware, requires v1.1.1.0); 64-bit; Run-as-32-bit = No
 
-ZavaClaims.intunewin  238578 bytes
-  SHA256: 850B9430B769C6DAF59789D5BAD27CFD85BB83F19EC7E6844B54DC6E50AB6D12
+ZavaClaims.intunewin  239122 bytes
+  SHA256: 2D3802A7EEDB122C738E00B2C765D85509925038410FA60A7A9BA1F4E513A50E
+  Contains: claims.exe 710361 bytes v1.1.1.0 (SHA256 7DB2D664BFF04EFCBE14B31B32208AAAD599E83F7D9FDC1CF3D68A6432D2394A),
+            Detect.ps1, Install.ps1, Uninstall.ps1
+
+ZavaClaimsAgentShortcut.intunewin  2372 bytes  (MCS pool only; generated 2026-10-07, uploaded as Intune app 'Zava Claims Agent Launch Shortcut')
+  SHA256: 55F6457ADBE1756499F743D8A4860B9F576D500A04ABAF353AF9B8E3C6358CC9
+  Install: cmd.exe /c copy /y "Zava Claims Agent Launch.lnk" "%PUBLIC%\Desktop\Zava Claims Agent Launch.lnk"
+  Uninstall: cmd.exe /c del /f /q "%PUBLIC%\Desktop\Zava Claims Agent Launch.lnk"
+  Detection: apps\legacy-claims-workstation\installer\agent-shortcut\Detect-AgentShortcut.ps1; 64-bit
+             (uploaded separately, not inside the package; also requires claims.exe)
+  Dependency: the 'Zava Claims Workstation' Intune app, auto-install (added by the script)

@@ -1,45 +1,25 @@
-# Runtime CUA region selection
+# Runtime region and handoff endpoint selection
 
-The **Transfer to AI Agent** button opens a browser-direct Direct Line
-conversation to a Copilot Studio "Computer Use" agent and streams the live
-agent desktop into the workspace. That agent drives a **Windows 365 Cloud PC**
-which runs in the geography of the agent's **Power Platform environment**.
+The Zava app reads `public/region-config.json` at runtime. This lets an installer point the same build at their own handoff service and Copilot Studio environment without editing source code.
 
-Different deployers want different regions (a US team wants a US Cloud PC; an
-APJ team wants Australia). So the region is resolved at **runtime** — it is not
-baked into the JavaScript bundle — and can be switched with **no rebuild**.
+## Resolution order
 
-## Where the region comes from
+1. Build-time fallback values from `.env.local`.
+2. Served `/region-config.json`.
+3. URL overrides such as `?region=<id>` or `?cuaRunBaseUrl=<url>` for a test session.
 
-Resolution order, lowest to highest precedence:
-
-1. **Build-time fallback** — `VITE_DIRECTLINE_TOKEN_URL` (optional). Lets a
-   single-region build work even with no config file.
-2. **Served `/region-config.json`** — the install/deploy-time region set and
-   the default `activeRegion`. This is the recommended mechanism.
-3. **`?region=<id>` URL override** — a per-session switch for demos/testing.
-
-The resolved Direct Line token URL is held in the settings store
-(`directLineTokenUrl`) and read by the Transfer button. A user's choice in
-**Settings → CUA region** is persisted and re-validated against the served
-config on the next load.
-
-## `public/region-config.json`
+## Example
 
 ```json
 {
-  "activeRegion": "au",
+  "activeRegion": "primary",
   "regions": [
     {
-      "id": "au",
-      "label": "Australia East",
-      "directLineTokenUrl": "https://<au-env-host>/powervirtualagents/botsbyschema/<schema>/directline/token?api-version=2022-03-01-preview",
-      "orchestratorUrl": "https://<your-handoff-func>.azurewebsites.net/api"
-    },
-    {
-      "id": "us",
-      "label": "US Central",
-      "directLineTokenUrl": "https://<us-env-host>/powervirtualagents/botsbyschema/<schema>/directline/token?api-version=2022-03-01-preview"
+      "id": "primary",
+      "label": "Primary",
+      "cuaRunBaseUrl": "https://<function-app>.azurewebsites.net/api",
+      "orchestratorUrl": "https://<function-app>.azurewebsites.net/api",
+      "directLineTokenUrl": "https://<env-host>.environment.api.powerplatform.com/powervirtualagents/botsbyschema/<schema>/directline/token?api-version=2022-03-01-preview"
     }
   ]
 }
@@ -47,36 +27,14 @@ config on the next load.
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `id` | yes | Stable id used in config, the `?region=` param, and persisted selection. |
-| `label` | no | Shown in the Settings picker (defaults to `id`). |
-| `directLineTokenUrl` | yes | The agent's per-environment Direct Line token endpoint. |
-| `orchestratorUrl` | no | Optional per-region handoff API base; falls back to the app default. |
+| `id` | yes | Stable region key. Must match the Function app `CUA_REGION` for MCS runs. |
+| `label` | yes | Human label in the app. |
+| `cuaRunBaseUrl` | yes for MCS | Function `/api` base for `/api/cua-run`. |
+| `orchestratorUrl` | yes for Foundry | Function `/api` base for `/api/foundry-claims`. |
+| `directLineTokenUrl` | optional | Kept for in-app stream compatibility. It is not the supported MCS trigger path. |
 
-Malformed entries (missing `id` or `directLineTokenUrl`) are dropped. If
-`activeRegion` does not match any region, the first region is used.
+If only one region is available, include only one region. Do not add extra labels that point to the same service; that makes troubleshooting harder.
 
-## Finding a region's Direct Line token URL
+## Related setup
 
-In **Copilot Studio**, open the agent → **Channels** → **Web app**. The embed
-code contains `.../bots/<schema>/webchat...`; the matching token endpoint is:
-
-```
-https://<env-host>/powervirtualagents/botsbyschema/<schema>/directline/token?api-version=2022-03-01-preview
-```
-
-`<env-host>` and `<schema>` are environment-specific — the schema prefix differs
-per environment (e.g. `crcce_…` vs `cr492_…`), so copy them from that
-environment's Web app channel rather than reusing another region's value.
-
-## Switching regions
-
-- **Change the default (no rebuild):** edit `activeRegion` in the deployed
-  `/region-config.json` and redeploy just that file.
-- **Per session:** append `?region=us` to the URL.
-- **In the app:** **Settings → CUA region**.
-
-## Adding a new region
-
-When Computer Use becomes available in another geography, create the agent +
-Cloud PC pool there, then add a `{ id, label, directLineTokenUrl }` entry to
-`region-config.json`. No code change or rebuild is required.
+The ordered install guide explains how to create the Function app settings and the matching Zava config: [`..\..\..\docs\install\07-handoff-and-zava.md`](../../../docs/install/07-handoff-and-zava.md).

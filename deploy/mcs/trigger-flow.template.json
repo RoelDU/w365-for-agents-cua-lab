@@ -1,0 +1,103 @@
+{
+  "name": "Zava claims handoff trigger template",
+  "type": 1,
+  "category": 5,
+  "description": "Template: Dataverse row-added trigger starts the Copilot Studio agent and writes a versioned receipt to the same trigger row. Replace every __PLACEHOLDER__ before import or manual rebuild.",
+  "clientdata": {
+    "properties": {
+      "connectionReferences": {
+        "shared_commondataserviceforapps": {
+          "runtimeSource": "embedded",
+          "connection": {
+            "name": "__DATAVERSE_CONNECTION_NAME__",
+            "connectionReferenceLogicalName": "__DATAVERSE_CONNECTION_REFERENCE_LOGICAL_NAME__"
+          },
+          "api": { "name": "shared_commondataserviceforapps" }
+        },
+        "shared_microsoftcopilotstudio": {
+          "runtimeSource": "embedded",
+          "connection": {
+            "name": "__COPILOT_STUDIO_CONNECTION_NAME__",
+            "connectionReferenceLogicalName": "__COPILOT_STUDIO_CONNECTION_REFERENCE_LOGICAL_NAME__"
+          },
+          "api": { "name": "shared_microsoftcopilotstudio" }
+        }
+      },
+      "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "parameters": {
+          "$authentication": { "defaultValue": {}, "type": "SecureObject" },
+          "$connections": { "defaultValue": {}, "type": "Object" }
+        },
+        "triggers": {
+          "When_a_claim_request_row_is_added": {
+            "type": "OpenApiConnectionWebhook",
+            "inputs": {
+              "parameters": {
+                "subscriptionRequest/message": 1,
+                "subscriptionRequest/entityname": "__TRIGGER_TABLE_LOGICAL_NAME_SINGULAR__",
+                "subscriptionRequest/scope": 4
+              },
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                "operationId": "SubscribeWebhookTrigger",
+                "connectionName": "shared_commondataserviceforapps"
+              }
+            },
+            "conditions": [
+              {
+                "expression": "@not(empty(triggerBody()?['__PREFIX___handoffcontext']))"
+              }
+            ],
+            "runtimeConfiguration": { "secureData": { "properties": ["outputs"] } }
+          }
+        },
+        "actions": {
+          "Execute_Agent_and_wait": {
+            "runAfter": {},
+            "type": "OpenApiConnectionWebhook",
+            "inputs": {
+              "parameters": {
+                "Copilot": "__COPILOT_SCHEMA_NAME__",
+                "body/locale": "@if(equals(json(triggerBody()?['__PREFIX___handoffcontext'])?['language'], 'ja'), 'ja-JP', 'en-US')",
+                "body/message": "@triggerBody()?['__PREFIX___handoffcontext']"
+              },
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_microsoftcopilotstudio",
+                "operationId": "ExecuteCopilotAsyncV2",
+                "connectionName": "shared_microsoftcopilotstudio"
+              },
+              "retryPolicy": { "type": "none" }
+            },
+            "runtimeConfiguration": { "secureData": { "properties": ["inputs", "outputs"] } }
+          },
+          "Compose_receipt": {
+            "runAfter": { "Execute_Agent_and_wait": ["Succeeded"] },
+            "type": "Compose",
+            "inputs": "@addProperty(addProperty(addProperty(addProperty(addProperty(json('{}'), 'definition_version', '2.0.0'), 'trigger_row_id', triggerBody()?['__PREFIX___claimrequestid']), 'flow_run_id', workflow()?['run']?['name']), 'conversation_id', body('Execute_Agent_and_wait')?['conversationId']), 'responses', body('Execute_Agent_and_wait')?['responses'])",
+            "runtimeConfiguration": { "secureData": { "properties": ["inputs"] } }
+          },
+          "Save_receipt_to_original_row": {
+            "runAfter": { "Compose_receipt": ["Succeeded"] },
+            "type": "OpenApiConnection",
+            "inputs": {
+              "parameters": {
+                "entityName": "__TRIGGER_TABLE_ENTITY_SET__",
+                "recordId": "@triggerBody()?['__PREFIX___claimrequestid']",
+                "item/__PREFIX___handoffreceipt": "@string(outputs('Compose_receipt'))"
+              },
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+                "operationId": "UpdateOnlyRecord",
+                "connectionName": "shared_commondataserviceforapps"
+              }
+            },
+            "runtimeConfiguration": { "secureData": { "properties": ["inputs", "outputs"] } }
+          }
+        }
+      }
+    },
+    "schemaVersion": "1.0.0.0"
+  }
+}

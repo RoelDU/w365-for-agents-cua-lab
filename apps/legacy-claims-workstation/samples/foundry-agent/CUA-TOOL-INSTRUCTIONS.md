@@ -74,30 +74,23 @@ the run, not the end. If a turn ends before that:
   if an optional field resists input after **2** tries, leave it blank and move on
   toward Submit. Do not loop on the legacy edit controls (validated live, #137).
 
-## Demo fallback identifiers (until handoff plumbing lands)
+## Demo fallback identifier (safety net only)
 
-The handoff context (`policy_number`, `caller_phone`, `intent`, `summary`) is
-*supposed* to arrive in the run message. If it is **absent** (e.g. the CUA tool
-has no Inputs wired yet and you would otherwise report `MISSING_POLICY_IDENTIFIER`),
-fall back to the **hero demo record** so the FNOL can still proceed — do not stop:
+The handoff context (`policy_number`, `caller_phone`, `intent`, `summary`) should
+arrive in the run message. If it is genuinely **absent** and you would otherwise
+report `MISSING_POLICY_IDENTIFIER`, fall back to the hero record so the FNOL can
+still proceed — do not stop:
 
 ```
-policy_number = POL-2024-008341   (Jordan Smith, AUTO)
-intent        = auto_collision    -> Loss Type COLLISION
+policy_number = POL-2024-008341  ·  intent = auto_collision (Loss Type COLLISION)
 summary       = Rear-ended at 5th and Main; no injuries.
 ```
 
-> ⚠️ **Builder TODO (live Copilot Studio — repo side already complete):** the
-> handoff orchestrator already sets these as Copilot Studio **Global variables**
-> (marked "external sources can set values") via a `pvaSetContext` event sent
-> before the message — see `apps/handoff-orchestrator/src/channel/directLineAdapter.js`
-> and `buildContextEnvelope` in `contract.js`. The envelope names are exactly:
-> `caller_phone`, `policy_number`, `intent`, `summary` (plus `correlation_id`,
-> `handoff_id`, `agent_display_name`). The **Start FNOL Handoff** topic must read
-> those Global variables and pass them into the **CUA tool Inputs** (the tool
-> component currently exposes no Inputs, which is why context didn't reach the
-> runtime). Once wired, **remove this hardcoded fallback** — it is a demo safety
-> net, not the intended data path.
+> Builder note: this is a safety net for when the CUA tool's **Inputs** aren't yet
+> wired to the orchestrator's `pvaSetContext` Global variables. Once those Inputs are
+> wired, remove this fallback. Wiring detail (variable names, the Start FNOL Handoff
+> topic, the `directLineAdapter.js` / `contract.js` envelope): see
+> [the MCS install page](../../../../docs/install/05-mcs-path.md).
 
 ## Provision and launch the app
 
@@ -234,7 +227,8 @@ an em-dash: `Zava Mutual — Claims Workstation v1.0`.
    * `IDC_FNOL_LOSS_LOCATION`: free text from the `summary`.
    * `IDC_FNOL_LOSS_TYPE`: select by intent → loss type map (`KNOWLEDGE.md`).
    * `IDC_FNOL_NARRATIVE`: type the `summary` (adjuster shorthand preferred).
-   * Click `IDC_FNOL_NEXT` (or `Alt+R` to jump to Review).
+   * Click `IDC_FNOL_NEXT` (**Next >**). Do not use `Alt+R`: in this app it is
+     **Refresh view**, not a jump to Review.
 3. **Step 2 — Vehicles / Property**: optional. Skip with **Next** if not
    required. To add: click `IDC_FNOL_VEH_ADD`, fill the dialog, click OK.
 4. **Step 3 — Parties**: optional. Skip with **Next**.
@@ -272,7 +266,8 @@ Steps (no questions to the operator at any point):
 4. **Step 1 — Incident**: set `IDC_FNOL_LOSS_TYPE` (7613) to `COLLISION`
    (auto_collision → COLLISION); type the `summary` into `IDC_FNOL_LOSS_LOCATION`
    (7612) and `IDC_FNOL_NARRATIVE` (7614); leave loss date/time at their defaults.
-5. Press `Alt+R` to jump to **Review & Submit** (skipping the optional pages),
+5. Click **Next >** (`IDC_FNOL_NEXT`) through Vehicles, Parties and Coverage to
+   **Review & Submit** (there is no Review shortcut; `Alt+R` refreshes the view),
    then click **Submit Claim** (`IDC_FNOL_SUBMIT` = 7604) or send `Alt+U`.
 6. Read the new claim id from the confirmation dialog (`IDC_CONFIRM_CLAIM_ID`
    = 5900), or `IDC_FNOL_RESULT_CLAIMID` (7651), or the clipboard. It matches

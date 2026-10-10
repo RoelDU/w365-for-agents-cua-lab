@@ -17,23 +17,20 @@
 
     Choose the AI backend up front with -AgentBackend (like tenant/subscription, this is
     a primary decision; it also reads config 'agentBackend'):
-      mcs     - Microsoft Copilot Studio over Direct Line (DEFAULT; phase C orchestrator).
-      foundry - Azure AI Foundry Computer-Use agent driving a Windows 365 for Agents Cloud
-                PC via samples/foundry-w365a-runner (phase D agent; orchestrator skipped).
+      mcs     - Microsoft Copilot Studio through the Dataverse-triggered /api/cua-run path.
+      foundry - Azure AI Foundry hosted agent through the /api/foundry-claims relay.
       both    - Configure both and bake both endpoints into the SPA so the desktop's
                 backend toggle can switch between them live for A/B demos.
 
     It then, in order:
       A. Validates the config and checks every prerequisite tool (fails fast with fixes).
       B. Signs the Azure CLI into the configured tenant + subscription.
-      C. (MCS) Deploys the standalone Durable Functions handoff orchestrator (apps/handoff-
-         orchestrator) that drives the published Microsoft Copilot Studio agent over
-         Bot Framework Direct Line - resource group, Storage, Function app (managed
-         identity), Key Vault (Direct Line secret + callback key), app settings,
-         publish. ON when the backend includes MCS.
-      D. (Foundry) Creates/updates the Foundry Computer-Use agent. ON when the backend
-         includes Foundry. The Foundry + W365A runtime itself is samples/foundry-w365a-
-         runner, run on/near the Cloud PC (watches the handoff, drives claims.exe).
+      C. Deploys the Azure Functions handoff service (apps/handoff-orchestrator): resource
+         group, Storage, Function app with managed identity, app settings, and publish.
+         The same Function app hosts the MCS Dataverse trigger API and the Foundry relay.
+      D. Does nothing by default. The supported Foundry hosted agent is deployed later with
+         deploy\foundry\Deploy-FoundryAgent.ps1. Only the retired -IncludeFoundryAgent switch
+         runs the old Deploy-Agent.ps1 (assistants/computer_use_preview) helper.
       E. Creates the Free Static Web App and builds + deploys the CCaaS app, baking the
          orchestrator URL(s) into the SPA so the desktop points at it with no manual config.
       F. Allows the CCaaS app origin to call the orchestrator (CORS).
@@ -42,14 +39,14 @@
       H. Prints a summary and the remaining manual gates.
 
     Two ways to drive Computer Use on the Windows 365 for Agents Cloud PC pool:
-      - MCS: the pool is bound in the Copilot Studio agent's Machine field.
-      - Foundry: samples/foundry-w365a-runner checks out a W365A session and runs the
-        Foundry responses Computer Use loop directly against the Cloud PC.
+      - MCS: the pool is bound in the Copilot Studio agent's Computer Use tool.
+      - Foundry: the hosted agent checks out a Windows 365 for Agents Cloud PC.
 
     What it intentionally does NOT do (out of scope, by design):
       - Provision or deprovision Cloud PCs / licenses (you create those; this only adds
         a device/user to a group so it becomes a CCaaS agent workstation).
-      - Publish the Copilot Studio agent or mint its Direct Line secret (human gate).
+      - Publish the Copilot Studio agent, create its Computer Use tool, or create the
+        Dataverse trigger flow (manual portal gates).
       - The one-time admin-consent bootstrap and the one-time model access approval.
 
     Keep this file ASCII-only (Windows PowerShell 5.1 reads non-BOM UTF-8 as ANSI).
@@ -80,11 +77,8 @@ param(
 
     # Choose the AI agent backend up front (like tenant/subscription, this is a
     # primary decision):
-    #   mcs     - Microsoft Copilot Studio over Direct Line (the default; phase C
-    #             orchestrator). Keeps the original path fully intact.
-    #   foundry - Azure AI Foundry Computer-Use agent driving a Windows 365 for Agents
-    #             Cloud PC (phase D agent + the samples\foundry-w365a-runner). Skips the
-    #             Direct Line orchestrator (Foundry does not use it).
+    #   mcs     - Microsoft Copilot Studio through the Dataverse-triggered /api/cua-run path.
+    #   foundry - Azure AI Foundry hosted agent through the /api/foundry-claims relay.
     #   both    - Configure BOTH and bake both endpoints into the SPA so the desktop's
     #             backend toggle can switch between them live (demo A/B).
     # When omitted, falls back to config 'agentBackend', then to the legacy
@@ -93,19 +87,18 @@ param(
     [string]$AgentBackend,
 
     # Skip individual stages (e.g. re-run just the SWA deploy after a code change).
-    # NOTE: you normally do NOT need -SkipOrchestrator. If the Direct Line secret is
-    # blank in your config, the build auto-skips the orchestrator and tells you to
-    # re-run after you paste the secret in. This flag is only an explicit override.
+    # NOTE: you normally do NOT need -SkipOrchestrator. It skips the Function app that
+    # hosts both supported handoff APIs.
     [switch]$SkipOrchestrator,
     [switch]$SkipStaticWebApp,
     [switch]$SkipIntune,
 
     # DEPRECATED alias. Foundry is now a first-class backend selected with
     # -AgentBackend foundry|both (which builds the agent and uses
-    # samples/foundry-w365a-runner behind the handoff_id contract). This switch is kept
-    # only for back-compat: it (a) defaults the backend to 'foundry' when -AgentBackend
-    # and config.agentBackend are both absent, and (b) opts in the DEPRECATED SWA-managed
-    # /api (thread_id/run_id) on the Static Web App. Prefer -AgentBackend.
+    # the retired local-runner contract). This switch is kept only for back-compat:
+    # it (a) defaults the backend to 'foundry' when -AgentBackend and config.agentBackend
+    # are both absent, and (b) opts in the retired SWA-managed /api (thread_id/run_id)
+    # on the Static Web App. Prefer deploy\foundry\Deploy-FoundryAgent.ps1 for Foundry.
     [switch]$IncludeFoundryAgent,
 
     # Deprecated alias: previously skipped the (then-default) Foundry agent. With the
@@ -209,22 +202,14 @@ function Resolve-AgentBackend {
     return 'mcs'
 }
 
-# Orchestrator is the Copilot Studio (MCS) path. ON unless the backend excludes MCS,
-# -SkipOrchestrator is set, or handoffOrchestrator.enabled=false / no Direct Line secret.
+# Handoff service hosts both supported paths. It is ON unless the backend excludes MCS,
+# -SkipOrchestrator is set, or handoffOrchestrator.enabled=false.
 function Test-OrchestratorEnabled {
     param($Cfg)
     if (-not $script:useMcs) { return $false }
     if ($SkipOrchestrator) { return $false }
     if (-not $Cfg.handoffOrchestrator) { return $false }
     if (($Cfg.handoffOrchestrator.PSObject.Properties.Name -contains 'enabled') -and (-not [bool]$Cfg.handoffOrchestrator.enabled)) { return $false }
-    # Auto-skip when there is neither a Direct Line secret NOR a token endpoint yet.
-    # The orchestrator cannot talk to the Copilot Studio agent without one, so
-    # deploying it now would be half-built. We defer this phase until you publish the
-    # agent and paste its secret OR token endpoint into the config, and re-run. This
-    # means you NEVER have to decide whether to pass -SkipOrchestrator.
-    $hasSecret = -not [string]::IsNullOrWhiteSpace([string]$Cfg.handoffOrchestrator.directLineSecret)
-    $hasToken  = -not [string]::IsNullOrWhiteSpace([string]$Cfg.handoffOrchestrator.directLineTokenEndpoint)
-    if (-not $hasSecret -and -not $hasToken) { return $false }
     return $true
 }
 
@@ -235,9 +220,6 @@ function Get-OrchestratorSkipReason {
     if ($SkipOrchestrator) { return 'flag' }
     if (-not $Cfg.handoffOrchestrator) { return 'noblock' }
     if (($Cfg.handoffOrchestrator.PSObject.Properties.Name -contains 'enabled') -and (-not [bool]$Cfg.handoffOrchestrator.enabled)) { return 'disabled' }
-    $hasSecret = -not [string]::IsNullOrWhiteSpace([string]$Cfg.handoffOrchestrator.directLineSecret)
-    $hasToken  = -not [string]::IsNullOrWhiteSpace([string]$Cfg.handoffOrchestrator.directLineTokenEndpoint)
-    if (-not $hasSecret -and -not $hasToken) { return 'nosecret' }
     return $null
 }
 
@@ -246,15 +228,18 @@ Invoke-Step 'A. Validate config + prerequisites' {
     $script:useMcs = $script:resolvedBackend -in @('mcs', 'both')
     $script:useFoundry = $script:resolvedBackend -in @('foundry', 'both')
     $reqOrch = $script:useMcs -and (-not $SkipOrchestrator)
-    $script:config = Get-DemoConfig -Path $ConfigPath -RequireOrchestrator:$reqOrch -RequireFoundry:$script:useFoundry -RequireLegacyFoundryApi:$IncludeFoundryAgent
+    # The supported Foundry path (hosted agent behind the handoff service relay) needs no
+    # foundry.* values here: the Foundry project is created later (docs\install\06-foundry-path.md).
+    # Only the retired -IncludeFoundryAgent helper reads them.
+    $script:config = Get-DemoConfig -Path $ConfigPath -RequireOrchestrator:$reqOrch -RequireFoundry:$IncludeFoundryAgent -RequireLegacyFoundryApi:$IncludeFoundryAgent
     Write-Host "  [ok]   config '$ConfigPath' valid"
     Write-Host "  backend      : $($script:resolvedBackend)  (MCS=$($script:useMcs), Foundry+W365A=$($script:useFoundry))"
     Write-Host "  subscription : $($script:config.azure.subscriptionId)"
     Write-Host "  tenant       : $($script:config.azure.tenantId)"
     Write-Host "  SWA region   : $($script:config.staticWebApp.location) (workload region: $($script:config.azure.location))"
     $aiPath = @()
-    if (Test-OrchestratorEnabled $script:config) { $aiPath += 'Copilot Studio orchestrator' } elseif ($script:useMcs) { $aiPath += 'orchestrator SKIPPED' }
-    if ($script:useFoundry) { $aiPath += 'Foundry + W365A runner (samples/foundry-w365a-runner)' }
+    if (Test-OrchestratorEnabled $script:config) { $aiPath += 'handoff Function app' } elseif ($script:useMcs) { $aiPath += 'handoff Function app SKIPPED' }
+    if ($script:useFoundry) { $aiPath += 'Foundry hosted relay' }
     Write-Host "  AI path      : $($aiPath -join ' + ')"
 
     # Make the skip decision explicit so the user never has to guess about -SkipOrchestrator.
@@ -264,23 +249,6 @@ Invoke-Step 'A. Validate config + prerequisites' {
             'flag'     { Write-Host "  Orchestrator : SKIPPED because you passed -SkipOrchestrator." }
             'disabled' { Write-Host "  Orchestrator : SKIPPED because handoffOrchestrator.enabled = false in your config." }
             'noblock'  { Write-Host "  Orchestrator : SKIPPED because there is no handoffOrchestrator block in your config." }
-            'nosecret' {
-                $script:orchDeferredForSecret = $true
-                Write-Host ""
-                Write-Host "  Orchestrator : SKIPPED for now - no Direct Line secret or token endpoint in your config yet." -ForegroundColor Yellow
-                Write-Host "                 This is NORMAL on a first run, before the Copilot Studio agent exists." -ForegroundColor Yellow
-                Write-Host "                 The website + infrastructure still get built now. You do NOT need" -ForegroundColor Yellow
-                Write-Host "                 to pass -SkipOrchestrator - the script handles this for you." -ForegroundColor Yellow
-                Write-Host "                 Later: publish your agent, then paste EITHER its Direct Line secret into" -ForegroundColor Yellow
-                Write-Host "                 handoffOrchestrator.directLineSecret, OR (if the channel exposes no" -ForegroundColor Yellow
-                Write-Host "                 classic secret, e.g. the 60-day premium trial) its Direct Line token" -ForegroundColor Yellow
-                Write-Host "                 endpoint into handoffOrchestrator.directLineTokenEndpoint, then re-run" -ForegroundColor Yellow
-                Write-Host "                 this script to deploy the orchestrator." -ForegroundColor Yellow
-                Write-Host "                 If publishing shows a '60-day trial' prompt, the agent's" -ForegroundColor Yellow
-                Write-Host "                 environment lacks Copilot Studio entitlement - see" -ForegroundColor Yellow
-                Write-Host "                 docs/licensing-and-entitlement.md (pay-as-you-go, cents per run)." -ForegroundColor Yellow
-                Write-Host ""
-            }
         }
     }
 
@@ -309,11 +277,7 @@ Invoke-Step 'B2. Copilot Studio environment preflight (Dataverse)' {
 # ----------------------------------------------------------------------------- C
 Invoke-Step 'C. AI handoff backend (Durable Functions orchestrator)' {
     if (-not (Test-OrchestratorEnabled $script:config)) {
-        if ($script:orchDeferredForSecret) {
-            Write-Host "  Skipping - no Direct Line secret yet (see step A). Re-run after pasting it in to deploy the orchestrator."
-        } else {
-            Write-Host "  Orchestrator not enabled (see the reason in step A). Skipping."
-        }
+        Write-Host "  Handoff service not enabled (see the reason in step A). Skipping."
         return
     }
     $script:orchResult = New-DemoHandoffOrchestrator -Config $script:config -RepoRoot $repoRoot
@@ -321,11 +285,13 @@ Invoke-Step 'C. AI handoff backend (Durable Functions orchestrator)' {
 }
 
 # ----------------------------------------------------------------------------- D
-Invoke-Step 'D. Foundry Computer-Use agent (Foundry + W365A backend)' {
-    if (-not $script:useFoundry -or $SkipAgent) {
-        $why = if ($SkipAgent) { '-SkipAgent passed' } else { "backend '$($script:resolvedBackend)' does not use Foundry" }
+Invoke-Step 'D. Foundry agent (retired helper; hosted agent is deployed later)' {
+    if (-not $IncludeFoundryAgent -or $SkipAgent) {
+        $why = if ($SkipAgent) { '-SkipAgent passed' }
+               elseif ($script:useFoundry) { 'the supported hosted agent is deployed later with deploy\foundry\Deploy-FoundryAgent.ps1 (docs\install\06-foundry-path.md)' }
+               else { "backend '$($script:resolvedBackend)' does not use Foundry" }
         Write-Host "  Foundry agent not built ($why). Using foundry.agentId from config if present ('$($script:config.foundry.agentId)')."
-        Write-Host "  The Foundry + W365A runtime lives in samples/foundry-w365a-runner (run it on/near the Cloud PC; it watches the orchestrator handoff and drives claims.exe via Computer Use)."
+        Write-Host "  Current Foundry hosted-agent deployment lives under deploy\foundry."
         $script:agentId = [string]$script:config.foundry.agentId
         return
     }
@@ -388,24 +354,21 @@ Invoke-Step 'E. Central CCaaS host (Azure Static Web Apps)' {
                elseif (Test-OrchestratorEnabled $script:config) { "https://$($script:config.handoffOrchestrator.functionAppName).azurewebsites.net/api" }
                else { '' }
 
-    # The Foundry backend's desktop endpoint is the local-orchestrator paired with the
-    # samples/foundry-w365a-runner (the orchestrator serves the desktop's HTTP /handoff; the
-    # runner watches its file-drop). Both run on/near the Cloud PC, so there is no
-    # fixed cloud URL). Baked as VITE_FOUNDRY_ORCHESTRATOR_URL so the SPA's backend
-    # toggle can switch to it; when backend is foundry-only it becomes the default.
-    $foundryUrl = if ($script:useFoundry) { [string]$script:config.foundry.orchestratorUrl } else { '' }
+    # Current Foundry uses the same Function app base as MCS, under /api/foundry-claims.
+    # An explicit foundry.orchestratorUrl can override this only for special testing.
+    $foundryUrl = if ($script:useFoundry) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$script:config.foundry.orchestratorUrl)) { [string]$script:config.foundry.orchestratorUrl }
+        else { $orchUrl }
+    } else { '' }
     # Default the SPA to a backend whose endpoint was actually baked. For 'both' this prefers
     # MCS when its orchestrator URL exists, else falls back to Foundry - never defaulting to a
-    # dead '/api' when the MCS half was skipped (e.g. no Direct Line secret yet).
+    # dead '/api' when the MCS half was skipped.
     $defaultBackend = if (-not [string]::IsNullOrWhiteSpace($orchUrl)) { 'mcs' }
                       elseif (-not [string]::IsNullOrWhiteSpace($foundryUrl)) { 'foundry' }
                       else { 'mcs' }
 
-    # The new Foundry backend drives the Cloud PC via samples/foundry-w365a-runner behind
-    # the SAME handoff_id contract (its endpoint is foundry.orchestratorUrl, baked above) -
-    # it does NOT use the deprecated SWA-managed /api (thread_id/run_id). So -IncludeFoundry
-    # (which deploys that legacy /api + FOUNDRY_* app settings) stays decoupled from the new
-    # backend selector and is driven only by the explicit legacy -IncludeFoundryAgent switch.
+    # The supported Foundry backend is the hosted relay in apps/handoff-orchestrator.
+    # -IncludeFoundry remains only for the retired SWA-managed /api path.
     $script:swaResult = New-DemoStaticWebApp -Config $script:config -RepoRoot $repoRoot -FoundryAgentId $script:agentId -OrchestratorUrl $orchUrl -FoundryOrchestratorUrl $foundryUrl -DefaultBackend $defaultBackend -IncludeFoundry:$IncludeFoundryAgent
 }
 
@@ -428,7 +391,8 @@ Invoke-Step 'G. Intune groups, legacy app + CCaaS Edge web app' {
         UserGroupName    = $script:config.agentWorkstation.userGroupName
         ScopeTagName     = $script:config.agentPool.scopeTagName
         CcaasWebLinkName = $script:config.agentWorkstation.webLink.displayName
-        BuildPackages    = $true
+        # Committed, prebuilt package: a normal install needs no C compiler.
+        PackageRoot      = (Join-Path $repoRoot 'deploy\intune-packages')
     }
     if ($url) { $envArgs['CcaasWebLinkUrl'] = $url }
     if ($script:config.agentPool.pilotCloudPcName)     { $envArgs['PilotCloudPcName'] = @($script:config.agentPool.pilotCloudPcName) }
@@ -451,86 +415,42 @@ if ($swaResult) {
 }
 Write-Host "AI backend    : $($script:resolvedBackend)  (MCS=$($script:useMcs), Foundry+W365A=$($script:useFoundry))" -ForegroundColor Green
 if ($orchResult) {
-    Write-Host "Orchestrator  : $($orchResult.BaseUrl)" -ForegroundColor Green
-    Write-Host "  Result callback URL : $($orchResult.BaseUrl)/handoff/{handoff_id}/result   (header: x-handoff-key)"
-    Write-Host "  Callback key        : $($orchResult.CallbackKey)"
-    Write-Host ""
-    Write-Host "  Validate the chain YOURSELF (no agent, no second person needed):" -ForegroundColor Green
-    Write-Host "    pwsh -File .\scripts\Test-Handoff.ps1 -SimulateResult -BaseUrl $($orchResult.BaseUrl) -CallbackKey $($orchResult.CallbackKey)" -ForegroundColor Green
-    Write-Host "    It starts a real handoff and proves queued -> ready -> submitted by injecting the"
-    Write-Host "    result callback the agent's flow would send. Drop -SimulateResult to watch a REAL"
-    Write-Host "    run (it sits at 'ready' until the #69 agent wiring below is done)."
+    Write-Host "Handoff API   : $($orchResult.BaseUrl)" -ForegroundColor Green
+    Write-Host "  MCS endpoint     : $($orchResult.BaseUrl)/cua-run"
+    Write-Host "  Foundry endpoint : $($orchResult.BaseUrl)/foundry-claims"
 }
 if ($script:useFoundry) {
-    Write-Host "Foundry runner: samples/foundry-w365a-runner" -ForegroundColor Green
-    Write-Host "  Run it on/near the Windows 365 for Agents Cloud PC. It watches the orchestrator"
-    Write-Host "  handoff (in/prefill.json), checks out a W365A session, drives claims.exe via the"
-    Write-Host "  Foundry Computer Use loop, and writes back ready/result. Desktop endpoint:"
-    Write-Host "    $([string]$script:config.foundry.orchestratorUrl)"
+    Write-Host "Foundry setup : use deploy\foundry\Deploy-FoundryAgent.ps1 for hosted-agent versions." -ForegroundColor Green
 }
 Write-Host "`nRemaining MANUAL gates (one-time, cannot be scripted):" -ForegroundColor White
-if ($orchDeferredForSecret) {
-    Write-Host "  - NEXT STEP (the orchestrator was NOT deployed yet): publish your Microsoft Copilot" -ForegroundColor Yellow
-    Write-Host "    Studio agent, copy its Direct Line secret into handoffOrchestrator.directLineSecret" -ForegroundColor Yellow
-    Write-Host "    in demo-config.local.json, then run this SAME script again. It will skip everything" -ForegroundColor Yellow
-    Write-Host "    already built and deploy the orchestrator this time." -ForegroundColor Yellow
-}
 if (Test-OrchestratorEnabled $config) {
-    $triggerText = if ([string]::IsNullOrWhiteSpace([string]$config.handoffOrchestrator.triggerText)) { 'A customer phone call has been handed off to you for automated processing. Using the caller phone, policy number, intent, and summary from the handoff context, open the Zava Mutual Claims Workstation and file a new First Notice of Loss, then return the resulting claim ID.' } else { [string]$config.handoffOrchestrator.triggerText }
-    $callbackUrl = if ($orchResult) { "$($orchResult.BaseUrl)/handoff/{handoff_id}/result" } else { '{orchestratorBaseUrl}/api/handoff/{handoff_id}/result' }
-    $callbackKey = if ($orchResult) { [string]$orchResult.CallbackKey } else { '<HANDOFF_CALLBACK_KEY>' }
-    Write-Host "  - Publish your Microsoft Copilot Studio agent and copy its Direct Line secret into handoffOrchestrator.directLineSecret (demo-config.local.json), then re-run."
-    Write-Host ""
-    Write-Host "  *** FINISH THE AGENT - handoff wiring (issue #69) ***" -ForegroundColor Yellow
-    Write-Host "  The build CANNOT auto-provision the agent's topics, Global variables, or result" -ForegroundColor Yellow
-    Write-Host "  flow: Copilot Studio exposes no supported creation API for the Computer Use tool" -ForegroundColor Yellow
-    Write-Host "  binding (see docs/build-the-agent.md 'Does any of this script?'). Wire these by hand" -ForegroundColor Yellow
-    Write-Host "  or the handoff stalls at 'ready' and never drives claims.exe:" -ForegroundColor Yellow
-    Write-Host "    a) Require authentication via 'Authenticate manually' (Settings -> Security ->" -ForegroundColor Yellow
-    Write-Host "       Authentication -> 'Authenticate manually', a custom Entra app reg). NOT 'No" -ForegroundColor Yellow
-    Write-Host "       authentication' (disables Computer Use - Test pane: 'CUA is disabled for" -ForegroundColor Yellow
-    Write-Host "       unauthenticated agents', pool shows 0 runs ever), and NOT 'Authenticate with" -ForegroundColor Yellow
-    Write-Host "       Microsoft' (disconnects the Direct Line channel the orchestrator uses). App-reg" -ForegroundColor Yellow
-    Write-Host "       steps in docs/build-the-agent.md step 2. Save + Publish, re-copy Direct Line secret." -ForegroundColor Yellow
-    Write-Host "    b) Inbound context (handoff-runbook.md 2a): create Global variables callerName," -ForegroundColor Yellow
-    Write-Host "       callerPhone, policyNumber, intent, correlationId, handoff_id, agentDisplayName" -ForegroundColor Yellow
-    Write-Host "       and enable 'External sources can set values' on each (filled from pvaSetContext)." -ForegroundColor Yellow
-    Write-Host "    c) Trigger topic (handoff-runbook.md 2b): add a topic whose trigger phrase is" -ForegroundColor Yellow
-    Write-Host "       EXACTLY '$triggerText' and that INVOKES the Computer Use tool. Disable web search /" -ForegroundColor Yellow
-    Write-Host "       other knowledge so the trigger is not answered by search instead of Computer Use." -ForegroundColor Yellow
-    Write-Host "    d) Result callback (handoff-runbook.md 2c): a typed Power Automate flow that POSTs the" -ForegroundColor Yellow
-    Write-Host "       claim result to $callbackUrl" -ForegroundColor Yellow
-    Write-Host "       with header x-handoff-key = $callbackKey" -ForegroundColor Yellow
-    Write-Host "  - Bind/refresh the Computer Use -> Windows 365 for Agents connection in Copilot Studio before each demo."
+    Write-Host "  - MCS: create the Dataverse trigger table, Dataverse application user, Copilot Studio Computer Use tool, trigger flow, and publish the agent. See docs\install\05-mcs-path.md."
+    Write-Host "  - Function settings: set DATAVERSE_ORG_URL, CUA_* fields, and FOUNDRY_* relay fields. See docs\install\07-handoff-and-zava.md."
 }
 if ($script:useFoundry) {
-    Write-Host "  - (Foundry) 'computer-use-preview' model access approval (https://aka.ms/oai/cuaaccess)."
-    Write-Host "  - Provision a Windows 365 for Agents pool, set foundry.* + w365a.* in the runner's .env, and run samples/foundry-w365a-runner on/near the Cloud PC."
+    Write-Host "  - Foundry: create the Foundry project, model deployment, agent identity/user, Windows 365 for Agents pool, and hosted-agent version. See docs\install\06-foundry-path.md."
 }
 Write-Host "  - Onboard a pool Cloud PC by adding its DEVICE object to the agent-pool group (or set agentPool.pilotCloudPcName); onboard the human agent by adding their USER account to the workstation group (or set agentWorkstation.agentUserName)."
 Write-Host ""
-Write-Host "  *** ATTACH A W365A POOL BILLING POLICY - manual billing step (issue #77) ***" -ForegroundColor Yellow
+Write-Host "  *** ATTACH WINDOWS 365 FOR AGENTS BILLING - manual billing step ***" -ForegroundColor Yellow
 Write-Host "  This script CANNOT attach billing (it commits Azure spend). Separate from Copilot" -ForegroundColor Yellow
 Write-Host "  Studio entitlement and NOT covered by M365/Copilot licensing: the Computer Use Cloud" -ForegroundColor Yellow
 Write-Host "  PC pool needs its OWN Windows 365 for Agents pay-as-you-go billing policy on the" -ForegroundColor Yellow
-Write-Host "  environment. Without it the pool is a TRIAL (0 machines), Computer Use never launches" -ForegroundColor Yellow
-Write-Host "  a session, and the handoff hangs at 'ready'. Power Platform admin center -> Licensing" -ForegroundColor Yellow
+Write-Host "  environment. Without it Computer Use cannot reliably launch Cloud PC sessions." -ForegroundColor Yellow
+Write-Host "  Power Platform admin center -> Licensing" -ForegroundColor Yellow
 Write-Host "  -> Pay-as-you-go plans -> include the Windows 365 / Hosted RPA product -> bind the" -ForegroundColor Yellow
 Write-Host "  agent's environment. Then set ALWAYS-AVAILABLE in the Windows 365 provisioning policy" -ForegroundColor Yellow
 Write-Host "  in INTUNE (NOT Copilot Studio): Intune admin center -> Devices -> Provision Cloud PCs ->" -ForegroundColor Yellow
 Write-Host "  Provisioning policies (Agents) -> Create policy -> General -> pick the Billing plan and" -ForegroundColor Yellow
 Write-Host "  set 'Always available Cloud PCs' = 1 (~`$5/mo) to avoid cold start. Provisioning takes" -ForegroundColor Yellow
-Write-Host "  ~20-30 min. See docs/licensing-and-entitlement.md (pool billing policy) and docs/w365a-pool.md." -ForegroundColor Yellow
+Write-Host "  ~20-30 min. See docs\install\03-tenant-and-cloud-pcs.md and docs\w365a-pool.md." -ForegroundColor Yellow
 if ($swaResult) {
     Write-Host ""
     Write-Host "  *** claims.exe on the W365A pool - delivered by Intune as a required Win32 app ***" -ForegroundColor Yellow
     Write-Host "  Copilot Studio Cloud PC pools are Entra-joined and Intune-enrolled, so claims.exe" -ForegroundColor Yellow
     Write-Host "  is installed ahead of time via Intune. The agent's first on-screen action just" -ForegroundColor Yellow
-    Write-Host "  launches the pre-installed app, then drives it by sight:" -ForegroundColor Yellow
-    Write-Host "    powershell -NoProfile -Command `"& (Join-Path `$env:LOCALAPPDATA 'ZavaClaims\claims.exe') --no-splash --fast-auth --stable-host --idle-timeout=0 --demo-pin=1234`"" -ForegroundColor Yellow
-    Write-Host "  This is baked into the agent's launch instructions (CUA-TOOL-INSTRUCTIONS.md / launch-claims-app.json)." -ForegroundColor Yellow
-    Write-Host "  Keep it BRACE-FREE: Copilot Studio parses { } in agent instructions as Power Fx, so an if(){} block" -ForegroundColor Yellow
-    Write-Host "  throws ContentValidationError before the agent runs (issue #69)." -ForegroundColor Yellow
+    Write-Host "  launches the pre-installed app (C:\Program Files\Business Applications\Zava Claims Workstation\claims.exe)." -ForegroundColor Yellow
+    Write-Host "  This launch is described in docs\mcs-computer-use-instructions.md." -ForegroundColor Yellow
     Write-Host "  Use an ALWAYS-AVAILABLE (warm) Cloud PC so the pre-installed app is ready before each" -ForegroundColor Yellow
     Write-Host "  live run and you avoid cold-start delays." -ForegroundColor Yellow
 }

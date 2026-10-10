@@ -1,10 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeAll, afterAll, beforeEach } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { transferableAbortController } from "node:util";
 
 // jsdom doesn't ship matchMedia — provide a permissive shim so
 // `prefers-reduced-motion` checks don't blow up in tests.
 beforeAll(() => {
+  // Node's fetch (used by MSW) requires a Node signal, not jsdom's DOM signal.
+  globalThis.AbortController = transferableAbortController().constructor as typeof AbortController;
   if (!window.matchMedia) {
     Object.defineProperty(window, "matchMedia", {
       writable: true,

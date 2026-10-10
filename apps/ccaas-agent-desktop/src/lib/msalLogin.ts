@@ -38,7 +38,13 @@ function colorFor(key: string): string {
 }
 
 export class MsalSignInError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** MSAL error code, when there is one. */
+    public readonly code = "",
+    /** True only when Microsoft says the person must interact (sign in, consent, MFA). */
+    public readonly interactionRequired = false
+  ) {
     super(message);
     this.name = "MsalSignInError";
   }
@@ -49,6 +55,39 @@ interface MsalAccount {
   name?: string;
   localAccountId?: string;
   homeAccountId?: string;
+  tenantId?: string;
+}
+
+/** Identifiers of an account (no tokens), used to bind a saved call to its owner. */
+export interface SignedInAccount {
+  homeAccountId: string;
+  tenantId: string;
+  username: string;
+  /** The Zava agent ID this account signs in as (see accountToIdentity). */
+  agentId: string;
+}
+
+function agentIdFor(account: MsalAccount): string {
+  return `entra-${account.localAccountId || account.homeAccountId || account.username || ""}`;
+}
+
+function toAccountRef(account: MsalAccount): SignedInAccount {
+  return {
+    homeAccountId: account.homeAccountId ?? "",
+    tenantId: account.tenantId ?? "",
+    username: account.username ?? "",
+    agentId: agentIdFor(account)
+  };
+}
+
+/** What this page load's redirect response did: the account it signed in, or why it failed. */
+let redirectOutcome: { error?: { code: string; message: string }; account?: SignedInAccount } | null = null;
+
+/** The redirect outcome of this page load, once (null when no redirect response was processed). */
+export function takeRedirectOutcome(): typeof redirectOutcome {
+  const outcome = redirectOutcome;
+  redirectOutcome = null;
+  return outcome;
 }
 
 function accountToIdentity(account: MsalAccount): AgentIdentity {
@@ -56,7 +95,7 @@ function accountToIdentity(account: MsalAccount): AgentIdentity {
   const displayName = account.name?.trim() || email || "Signed-in user";
   const id = account.localAccountId || account.homeAccountId || email;
   return {
-    agent_id: `entra-${id}`,
+    agent_id: agentIdFor(account),
     display_name: displayName,
     email,
     role: "csr",
@@ -92,7 +131,24 @@ async function getPca() {
     const capturedHash = (
       window as unknown as { __entraRedirectHash?: string }
     ).__entraRedirectHash;
-    await pca.handleRedirectPromise(capturedHash ?? undefined).catch(() => null);
+    // Record the outcome instead of discarding it: a reconnect must know whether
+    // Microsoft's redirect actually succeeded and which account it signed in.
+    try {
+      const result = await pca.handleRedirectPromise(capturedHash ?? undefined);
+      if (result?.account) {
+        pca.setActiveAccount(result.account);
+        redirectOutcome = { account: toAccountRef(result.account) };
+      }
+    } catch (err) {
+      const e = (err ?? {}) as { errorCode?: string; errorMessage?: string; message?: string };
+      const { redactSecrets } = await import("./redact");
+      redirectOutcome = {
+        error: {
+          code: e.errorCode || "redirect_error",
+          message: redactSecrets(String(e.errorMessage || e.message || "")).trim().slice(0, 300)
+        }
+      };
+    }
     return pca;
   })();
   try {
@@ -135,11 +191,25 @@ export async function completeRedirectSignIn(): Promise<AgentIdentity | null> {
     return null;
   }
   // getPca() already drained handleRedirectPromise(); read the resolved account.
-  const accounts = pca.getAllAccounts();
-  if (accounts.length > 0) {
-    return accountToIdentity(accounts[0]);
+  const account = currentAccount(pca);
+  return account ? accountToIdentity(account) : null;
+}
+
+/** The account Zava acts as: the one the last redirect signed in, else the first cached one. */
+function currentAccount(pca: import("@azure/msal-browser").IPublicClientApplication) {
+  return pca.getActiveAccount() ?? pca.getAllAccounts()[0] ?? null;
+}
+
+/** Identifiers of the signed-in account, or null when there is none (or sign-in is not configured). */
+export async function getSignedInAccount(): Promise<SignedInAccount | null> {
+  let pca;
+  try {
+    pca = await getPca();
+  } catch {
+    return null;
   }
-  return null;
+  const account = currentAccount(pca);
+  return account ? toAccountRef(account) : null;
 }
 
 /**
@@ -158,4 +228,68 @@ export async function signOutMicrosoft(): Promise<void> {
   }
   const account = pca.getAllAccounts()[0];
   await pca.logoutRedirect(account ? { account } : undefined);
+}
+
+/**
+ * Acquire an access token for the handoff API (`api://<clientId>/Handoff.Access`)
+ * for the already signed-in user, silently. MSAL reuses a valid cached token,
+ * renews it with its refresh token, or renews it through the Entra session, in
+ * that order. Used by the AI agent destinations (Foundry hosted and new-harness),
+ * whose relays validate the token and bind the request to this user's tenant:oid.
+ * Never starts an interactive redirect mid-handoff: when Microsoft requires the
+ * person to interact, the error says so (interactionRequired) and the caller
+ * offers startHandoffReconnect().
+ */
+export async function acquireHandoffAccessToken(): Promise<string> {
+  const { getEntraConfig } = await import("./msalConfig");
+  const pca = await getPca();
+  const account = currentAccount(pca);
+  if (!account) {
+    throw new MsalSignInError("Sign in with Microsoft before transferring to an AI agent.", "no_account", true);
+  }
+  const cfg = await getEntraConfig();
+  try {
+    const result = await pca.acquireTokenSilent({
+      account,
+      scopes: [`api://${cfg.clientId}/Handoff.Access`]
+    });
+    return result.accessToken;
+  } catch (err) {
+    const { InteractionRequiredAuthError } = await import("@azure/msal-browser");
+    const e = (err ?? {}) as { errorCode?: string; errorMessage?: string; message?: string };
+    const code = e.errorCode ?? "";
+    const interactionRequired = err instanceof InteractionRequiredAuthError || INTERACTION_CODES.has(code);
+    // Microsoft's own text (e.g. "AADSTS50058 ... Trace ID ...") is kept for diagnosis; never a token.
+    const { redactSecrets } = await import("./redact");
+    const detail = redactSecrets(String(e.errorMessage || e.message || "")).trim().slice(0, 300);
+    const head = interactionRequired
+      ? `Microsoft needs you to confirm your sign-in before an AI agent transfer (${code}).`
+      : `Could not get a sign-in token for the AI agent transfer${code ? ` (${code})` : ""}.`;
+    throw new MsalSignInError(detail && detail !== code ? `${head} ${detail}` : head, code, interactionRequired);
+  }
+}
+
+const INTERACTION_CODES = new Set(["interaction_required", "consent_required", "login_required"]);
+
+/**
+ * The one reconnect action: renew the relay token through Microsoft's sign-in
+ * page, using the same redirect flow as the app's own sign-in (popups are not
+ * reliable in the Edge app window). The caller saves the call first; App.tsx
+ * verifies the returned account and restores it. Nothing is transferred here.
+ * When MSAL holds no account, loginHint names the expected owner so Microsoft
+ * offers that account; the returned account is still verified on return.
+ */
+export async function startHandoffReconnect(opts: { loginHint?: string } = {}): Promise<void> {
+  const { getEntraConfig } = await import("./msalConfig");
+  const pca = await getPca();
+  const account = currentAccount(pca);
+  const cfg = await getEntraConfig();
+  await pca.acquireTokenRedirect({
+    scopes: [`api://${cfg.clientId}/Handoff.Access`],
+    ...(account ? { account } : opts.loginHint ? { loginHint: opts.loginHint } : {}),
+    // Return through /login, exactly like the app's own sign-in: the router sends an
+    // unauthenticated load to /login before MSAL finishes, so a /workspace start page
+    // would never match and MSAL would keep re-navigating without completing.
+    redirectStartPage: new URL("/login", window.location.origin).href
+  });
 }

@@ -54,7 +54,11 @@ param(
     # --- Agent POOL: the W365A Cloud PC pool's device group (legacy claims app target) -
     # The pool's Cloud PCs are Entra DEVICE objects; the legacy claims app is assigned
     # to this device group so every current/future pool Cloud PC gets it automatically.
-    [string]$DeviceGroupName = "Zava-Demo-Agent-CPCs",
+    # Default: the dynamic CPCPool_ group created by Enable-W365aPrereqs.ps1 -CreateDynamicGroup
+    # (Copilot Studio hosted pool devices). If the named group does not exist, an EMPTY
+    # assigned group is created; it only receives devices you add (or a Windows 365 for
+    # Agents pool that selects it under Device grouping).
+    [string]$DeviceGroupName = "Zava W365A Cloud PC Pools",
     [string]$ScopeTagName = "Zava-Demo",
 
     # --- Existing Cloud PC(s) to add to the group now (by Cloud PC / device name) ---
@@ -72,7 +76,10 @@ param(
     [string[]]$AgentUserName = @(),
 
     # --- Intune packaging ---
-    [string]$PackageRoot = (Join-Path $PSScriptRoot "..\out\intune\packages"),
+    # Default: the committed, prebuilt package (no compiler needed). -BuildPackages rebuilds
+    # from source into out\intune\packages instead and needs MinGW gcc + windres on PATH
+    # (apps\legacy-claims-workstation\build.bat).
+    [string]$PackageRoot = (Join-Path $PSScriptRoot "..\deploy\intune-packages"),
     [switch]$BuildPackages,
 
     # --- Legacy claims app delivery (standing demo path: Intune Win32) -------------
@@ -134,6 +141,9 @@ if (-not $SkipPwshRelaunch -and $PSVersionTable.PSVersion.Major -lt 6 -and -not 
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $graphBeta = "https://graph.microsoft.com/beta"
+if ($BuildPackages -and -not $PSBoundParameters.ContainsKey('PackageRoot')) {
+    $PackageRoot = Join-Path $repoRoot "out\intune\packages"
+}
 
 # --- App catalogue (display names MUST match the docs/detection scripts) -------
 # The CCaaS desktop is hosted centrally on Azure Static Web Apps and delivered as a
@@ -305,6 +315,9 @@ function Invoke-GroupsPhase {
         }
         $deviceGroup = Invoke-MgGraphRequest -Method POST -Uri "$graphBeta/groups" -Body ($body | ConvertTo-Json)
         Write-Host "Created device group '$DeviceGroupName' ($($deviceGroup.id))."
+        if (-not ($PilotCloudPcName | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+            Write-Warning "'$DeviceGroupName' is a new ASSIGNED group with no members, so no Cloud PC gets the Claims app yet. For Copilot Studio (MCS) pools, use the dynamic group from Enable-W365aPrereqs.ps1 -CreateDynamicGroup ('Zava W365A Cloud PC Pools'). For a Windows 365 for Agents (Foundry) pool, select this group under Device grouping in the pool's provisioning policy."
+        }
     }
     $deviceGroup = Resolve-WhatIfPlaceholder -Object $deviceGroup -Label $DeviceGroupName
 

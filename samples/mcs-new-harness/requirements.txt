@@ -1,0 +1,7 @@
+azure-functions==1.24.0
+mcp==2.2.0
+starlette==1.7.0
+httpx2==2.13.1
+PyJWT[crypto]==2.14.0
+anyio==4.15.1
+jsonschema==4.26.0

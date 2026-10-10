@@ -10,3 +10,5 @@ require("./functions/orchestrator");
 require("./functions/activities");
 require("./functions/http");
 require("./functions/cuaRun");
+require("./functions/foundryRelay");
+require("./functions/newHarnessRelay");

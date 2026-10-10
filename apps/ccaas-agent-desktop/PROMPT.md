@@ -19,7 +19,7 @@
 ## Role
 
 You are building a complete modern web application from scratch in the folder
-**`apps/ccaas-agent-desktop/`** of the **`RoelDU/w365-for-agents-cua-lab`** monorepo
+**`apps/ccaas-agent-desktop/`** of this lab repository
 (working directory: `C:\Dev\Work\CCaaSDemoApp\apps\ccaas-agent-desktop`).
 Produce all source files, build configuration, TypeScript types, components,
 mock data, state stores, tests, documentation, and CI configuration in one
@@ -293,6 +293,7 @@ real-time state:
 | `ready` | yellow dot + "AI agent is now driving the claims system" | app-level checkpoint from the Foundry/Computer-Use flow |
 | `submitted` | green dot + claim ID prominently displayed + reserve amount + adjuster + "Confirm with caller and dispose the call" | Foundry run completed and `/api` parsed the result |
 | `error` | red dot + error code + message + **Retry** / **Fall back to manual** buttons | `/api` mapped a failed/expired/cancelled run or a request error |
+| `error` (outcome unknown) | "STOPPED - OUTCOME UNKNOWN" + message + **Fall back to manual** only, no **Retry** | A claim may or may not have been filed: the Foundry agent may have sent Submit (`submit_sent` true or not reported), its result does not belong to this request, or `/api/cua-run` returned `outcome: "uncertain"`. The request stays as the last transfer through reset and reload, and no new AI transfer to any destination (Copilot Studio, Foundry or the experimental new harness) starts until the person selects "I checked the claims system". |
 
 State updates are obtained by **polling**
 `GET /handoff/:request_id/status?thread_id=...&run_id=...` every 1.5 seconds.
@@ -321,8 +322,10 @@ itself be driven by a CUA (Foundry agent, Copilot Studio) for fully-autonomous
 end-to-end demos. So:
 
 - Every interactive control has a stable `data-testid` AND a meaningful
-  `aria-label` (e.g., the AI transfer destination is
-  `data-testid="handoff-to-ai"`, `aria-label="Transfer to AI Agent"`).
+  `aria-label` (e.g., the AI transfer destinations are
+  `data-testid="handoff-to-ai-mcs"` / `aria-label="Transfer to AI Agent - Copilot Studio"`
+  and `data-testid="handoff-to-ai-foundry"` / `aria-label="Transfer to AI Agent - Foundry"`;
+  CUA mode auto-selects the destination for the backend chosen in settings).
 - All buttons use real `<button>` elements; no `<div onClick>` patterns.
 - The handover follows the realistic CCaaS **transfer-to-destination** model: the
   call-toolbar **Transfer** control (or `Ctrl+Shift+H`) opens a **Transfer
@@ -391,7 +394,7 @@ they emotionally engage with the demo.
 
 ## Settings (Settings page)
 
-Expose these controls so Roel can switch modes mid-demo without redeploying:
+Expose these controls so the presenter can switch modes mid-demo without redeploying:
 
 - **Auth mode** (read-only display of effective `VITE_AUTH_MODE`)
 - **Handoff API URL** (live-editable, persists to `localStorage`; default `/api`)
@@ -449,10 +452,42 @@ Expose these controls so Roel can switch modes mid-demo without redeploying:
 
 ## Non-goals (do NOT do these)
 
+### G4 backend comparison requirement
+
+The existing backend selector chooses MCS or the Foundry runner for the same
+claims-handoff task. MCS region/trigger/Direct Line settings must not override
+Foundry routing. Each in-progress handoff keeps its original endpoint and
+request identity even if settings change. Activity and result stay in that
+interaction; mismatched or invalid responses are errors, not success.
+Preserve the existing MCS HTTP acknowledgement (`handoff_id`, `status`,
+`status_url`, optional disposition, no `request_id`). Poll that handoff ID
+and check the returned status against the original request ID. Never replace
+a conflicting returned ID. Foundry acknowledgements still require the
+matching request ID and execution mode.
+
+For MCS autonomous-trigger handoffs, send the displayed region ID with the
+request. If the service rejects a region mismatch, keep the interaction and
+show a refresh message without retrying. Receipt-backed live runs wait for
+their actual claim result; preserve the behavior described in
+`../../docs/option-a-inapp-near-live.md#receipt-backed-runs`.
+
+The supported Foundry path uses the hosted relay in `apps/handoff-orchestrator` and the hosted agent in `samples/foundry-hosted-claims`. Preserve the shared schemas; a
+separate CallContext file carries the full transcript and requester details.
+Surface actual runner activity and available agent summaries. Label offline
+simulation prominently, including its synthetic result, without a fake live
+desktop or automatic copying of a synthetic claim ID. Unavailable runners
+must fail explicitly, never silently route to MCS. Live platform access and
+the existing preview-adapter assumptions require separate verification.
+See `../../docs/install/06-foundry-path.md`.
+
+The following original non-goals remain except that the existing local
+bridge/runner is a supported G4 offline rehearsal path, not a replacement
+for the MCS backend.
+
 - Do not use Next.js, Remix, Angular, Vue, or Svelte — React + Vite only.
 - Do not add a separate Node server for the SPA. The deployed backend seam is
   the Azure Static Web Apps managed Functions API under `api/`; the old
-  `../../samples/local-orchestrator/` path is legacy/local testing only.
+  `samples/mcs-new-harness` remains experimental and is not part of the install path.
 - Do not integrate with any real CCaaS provider's API (Genesys Cloud,
   Five9, NICE, Talkdesk). The whole CCaaS layer is simulated.
 - Do not integrate with any real telephony, real speech recognition, real
@@ -502,4 +537,4 @@ Expose these controls so Roel can switch modes mid-demo without redeploying:
 - [ ] GitHub Actions workflow at `../../.github/workflows/ccaas-agent-desktop.yml`
       that builds and tests this app on PRs touching `apps/ccaas-agent-desktop/**`
 - [ ] Leave the repository in a complete, buildable state. Do not commit/push
-      yourself — Roel will review and push.
+      yourself — the maintainer will review and push.

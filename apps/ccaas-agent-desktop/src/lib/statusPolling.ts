@@ -1,12 +1,15 @@
 import type { HandoffStatusPayload } from "@/types/contracts";
-import { getHandoffStatus } from "./orchestratorClient";
+import { getHandoffStatus, OrchestratorError } from "./orchestratorClient";
 
 export interface StatusSubscriptionOptions {
   baseUrl: string;
   /** Durable handoff id; the only id the browser needs to poll status. */
   handoffId: string;
+  requestId?: string;
+  executionMode?: "simulation" | "live" | null;
   onUpdate: (payload: HandoffStatusPayload) => void;
   onError?: (err: unknown) => void;
+  onFailure?: (err: unknown) => void;
   pollIntervalMs?: number;
 }
 
@@ -28,6 +31,7 @@ const TERMINAL: ReadonlyArray<HandoffStatusPayload["status"]> = ["submitted", "e
 export function subscribeToStatus(opts: StatusSubscriptionOptions): Subscription {
   const pollMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   let stopped = false;
+  let failures = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const stop = () => {
@@ -42,8 +46,11 @@ export function subscribeToStatus(opts: StatusSubscriptionOptions): Subscription
   const tick = async () => {
     if (stopped) return;
     try {
-      const payload = await getHandoffStatus(opts.baseUrl, opts.handoffId);
+      const payload = await getHandoffStatus(opts.baseUrl, opts.handoffId, {
+        requestId: opts.requestId, executionMode: opts.executionMode
+      });
       if (stopped) return;
+      failures = 0;
       opts.onUpdate(payload);
       if (TERMINAL.includes(payload.status)) {
         stop();
@@ -51,6 +58,12 @@ export function subscribeToStatus(opts: StatusSubscriptionOptions): Subscription
       }
     } catch (err) {
       if (!stopped) opts.onError?.(err);
+      failures += 1;
+      if (!stopped && opts.onFailure && ((err instanceof OrchestratorError && err.fatal) || failures >= 3)) {
+        opts.onFailure(err);
+        stop();
+        return;
+      }
     }
     if (!stopped) {
       timer = setTimeout(tick, pollMs);

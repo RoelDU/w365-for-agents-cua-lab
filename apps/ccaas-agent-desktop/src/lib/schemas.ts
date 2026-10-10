@@ -12,7 +12,9 @@ import type {
   Prefill,
   ReadyMessage,
   ResultMessage,
-  ErrorMessage
+  ErrorMessage,
+  HandoffStatusPayload,
+  HandoffAcknowledgement
 } from "@/types/contracts";
 
 const ajv = new Ajv2020({
@@ -30,6 +32,42 @@ export const validatePrefill = compile<Prefill>(prefillSchema as object);
 export const validateReady = compile<ReadyMessage>(readySchema as object);
 export const validateResult = compile<ResultMessage>(resultSchema as object);
 export const validateError = compile<ErrorMessage>(errorSchema as object);
+
+const statusProperties = {
+  ...readySchema.properties, ...resultSchema.properties, ...errorSchema.properties,
+  status: { enum: ["queued", "prefilled", "ready", "submitted", "error"] },
+  execution_mode: { enum: ["simulation", "live"] },
+  activity: {
+    type: "array", maxItems: 50,
+    items: {
+      type: "object", required: ["id", "ts_iso", "level", "message"],
+      properties: {
+        id: { type: "string", minLength: 1 },
+        ts_iso: { type: "string", format: "date-time" },
+        level: { enum: ["info", "warn", "error"] },
+        message: { type: "string", maxLength: 4000 }
+      }
+    }
+  }
+};
+
+export const validateHandoffStatus = compile<HandoffStatusPayload>({
+  type: "object", required: ["request_id", "status"],
+  properties: statusProperties,
+  allOf: [
+    { if: { properties: { status: { const: "submitted" } } }, then: { required: ["claim_id"] } },
+    { if: { properties: { status: { const: "error" } } }, then: { required: ["error_code", "message"] } }
+  ]
+});
+
+export const validateHandoffAcknowledgement = compile<HandoffAcknowledgement>({
+  type: "object", required: ["request_id", "status"],
+  properties: {
+    request_id: statusProperties.request_id, status: statusProperties.status,
+    handoff_id: { type: "string", minLength: 1 }, status_url: { type: "string" },
+    execution_mode: statusProperties.execution_mode
+  }
+});
 
 export interface ValidationResult<T> {
   ok: boolean;

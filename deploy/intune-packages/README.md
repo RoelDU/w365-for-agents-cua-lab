@@ -5,7 +5,8 @@ in-tenant admin workstation can deploy **without a build toolchain** (no MinGW C
 compiler). They are normally git-ignored (`*.intunewin`); a `.gitignore`
 exception tracks this folder specifically.
 
-The demo ships exactly **one** Win32 app, the legacy Zava Claims Workstation. The
+The demo ships exactly **one** Win32 program, the legacy Zava Claims Workstation, plus a
+small MCS-only package that adds its agent launch icon. The
 CCaaS agent desktop ("Zava Contact Center") is delivered as an Intune **managed
 web link** to its centrally-hosted Azure Static Web App, not a Win32 package, so
 there is intentionally no `CCaaSAgentDesktop.intunewin` here. See
@@ -14,6 +15,7 @@ there is intentionally no `CCaaSAgentDesktop.intunewin` here. See
 | File | Contents |
 | --- | --- |
 | `ZavaClaims.intunewin` | Zava Claims Workstation (native Win32 `claims.exe`) |
+| `ZavaClaimsAgentShortcut.intunewin` | MCS pool only: the "Zava Claims Agent Launch" desktop icon (one `.lnk`, no program). Deploy with `scripts\Deploy-McsAgentShortcut.ps1`; rebuild with its `-BuildOnly` switch (no compiler needed). |
 | `PACKAGE-MANIFEST.txt` | SHA256 checksums + source commit for integrity verification |
 
 ## Deploy from the admin workstation
@@ -38,8 +40,12 @@ Get-FileHash .\deploy\intune-packages\*.intunewin -Algorithm SHA256
 
 Add `-DeviceCode` to authenticate without launching a local browser. The script
 prints a URL and a short code; open them on **any other device** (phone/laptop),
-sign in as the admin, and the workstation picks up the token automatically. This
-is the recommended path for headless/locked-down or Cloud PC admin hosts.
+sign in as the admin, and the workstation picks up the token automatically.
+Device code sign-in is subject to your tenant's Conditional Access, and Microsoft
+recommends blocking it except in documented cases
+([authentication flow policies](https://learn.microsoft.com/entra/identity/conditional-access/policy-block-authentication-flows#device-code-flow-policies)).
+Use it only where your tenant allows it; if it is blocked, sign in with a browser
+on a device that meets your policies.
 
 ```powershell
 .\scripts\Deploy-DemoEnvironment.ps1 -TenantId <your-tenant-id> `

@@ -19,6 +19,15 @@ describe("payloadBuilder", () => {
     expect(id.startsWith("REQ-2024-")).toBe(true);
   });
 
+  it("generates hard-to-guess IDs that stay unique after a counter reset", () => {
+    const first = new Set(Array.from({ length: 200 }, () => generateRequestId()));
+    resetRequestIdCounter();
+    const second = Array.from({ length: 200 }, () => generateRequestId());
+    expect(first.size).toBe(200);
+    expect(second.some((id) => first.has(id))).toBe(false);
+    for (const id of first) expect(id).toMatch(/^REQ-\d{4}-\d{12}$/);
+  });
+
   it("buildCallContext produces a CallContext that validates against the schema", () => {
     const scenario = HERO_SCENARIOS[0];
     const agent = SAMPLE_AGENT;

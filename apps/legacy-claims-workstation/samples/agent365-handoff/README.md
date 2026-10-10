@@ -32,5 +32,5 @@ local orchestrator or a real Agent365 webhook. Useful for:
 ```
 
 For the production demo flow (CCaaS desktop → orchestrator → legacy app),
-use the top-level [`samples/local-orchestrator/`](../../../../samples/local-orchestrator/)
+use the top-level [the supported handoff service](../../../../docs/install/07-handoff-and-zava.md)
 instead.

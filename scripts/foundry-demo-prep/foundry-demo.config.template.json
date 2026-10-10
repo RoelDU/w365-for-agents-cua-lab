@@ -1,0 +1,11 @@
+{
+  "_readme": "Copy this file to foundry-demo.config.json in the same folder and replace every <placeholder>. No passwords, secrets or tokens belong in this file. See START-HERE.txt.",
+  "zavaUrl": "https://<your-static-web-app>.azurestaticapps.net",
+  "relayUrl": "https://<your-relay-function-app>.azurewebsites.net/api/foundry-claims",
+  "foundryAgentUrl": "https://<account>.services.ai.azure.com/api/projects/<project>/agents/<agent-name>?api-version=v1",
+  "cloudPcPoolId": "<Windows 365 agent pool id>",
+  "tenantId": "<Microsoft Entra tenant id, used only in sign-in hints>",
+  "expectedFoundryVersion": "",
+  "poolAzureConfigDir": "",
+  "foundryAzureConfigDir": ""
+}

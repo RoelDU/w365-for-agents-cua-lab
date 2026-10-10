@@ -23,7 +23,7 @@ export interface RequestedBy {
 }
 
 /** The AI backend a handoff is routed to (the desktop backend toggle). */
-export type TargetBackend = "mcs" | "foundry";
+export type TargetBackend = "mcs" | "foundry" | "mcs-new-harness";
 
 /** call-context.schema.json — emitted by this app at handoff time. */
 export interface CallContext {
@@ -113,4 +113,19 @@ export interface HandoffStatusPayload {
   error_code?: ErrorCode;
   message?: string;
   timestamp?: string;
+  execution_mode?: "simulation" | "live";
+  activity?: {
+    id: string;
+    ts_iso: string;
+    level: "info" | "warn" | "error";
+    message: string;
+  }[];
+}
+
+export interface HandoffAcknowledgement {
+  request_id: string;
+  status: Exclude<HandoffStatus, "idle">;
+  handoff_id?: string;
+  status_url?: string;
+  execution_mode?: "simulation" | "live";
 }

@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="t d">
+  <title id="t">Agentic AI with computer use on Windows 365 for Agents</title>
+  <desc id="d">Conceptual illustration. A person or process hands a goal to an agent. The agent, built either with Copilot Studio (low-code) or Microsoft Foundry (pro-code), plans the next step and uses computer use: it observes the screen of a Cloud PC for Agents and acts by clicking and typing in an existing Windows app that has no API. Windows 365 for Agents provides a pool of managed Cloud PCs that agents check out, use and check in; each Cloud PC is reset after use. Microsoft Entra ID and Microsoft Intune govern identity, policy and app delivery. The result returns to the same interaction.</desc>
+  <!-- Original illustration for this repository (MIT licence). No product logos or screenshots are used. -->
+  <style>
+    text { font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif; fill: #1f2328; }
+    .title { font-size: 22px; font-weight: 600; }
+    .note { font-size: 13px; fill: #57606a; }
+    .h { font-size: 18px; font-weight: 600; }
+    .hw { font-size: 18px; font-weight: 600; fill: #ffffff; }
+    .b { font-size: 14px; }
+    .bs { font-size: 14px; font-weight: 600; }
+    .s { font-size: 12.5px; fill: #57606a; }
+    .num { font-size: 13px; font-weight: 700; fill: #ffffff; }
+    .numb { font-size: 13px; font-weight: 700; fill: #0f6cbd; }
+    .blue { fill: #0f6cbd; }
+    .dark { fill: #1f2328; }
+    .panel { fill: #f6f8fa; stroke: #d0d7de; stroke-width: 1.5; }
+    .card { fill: #ffffff; stroke: #d0d7de; stroke-width: 1.2; }
+    .accent { fill: #ffffff; stroke: #0f6cbd; stroke-width: 2; }
+    .arrow { stroke: #0f6cbd; stroke-width: 2.5; fill: none; marker-end: url(#ah); }
+    .arrowg { stroke: #57606a; stroke-width: 2; fill: none; marker-end: url(#ahg); }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0f6cbd"/>
+    </marker>
+    <marker id="ahg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <rect x="1" y="1" width="1198" height="638" rx="16" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="40" y="48" class="title">Agentic AI with computer use, on Windows 365 for Agents</text>
+  <text x="40" y="74" class="note">Conceptual illustration, not a product screenshot.</text>
+
+  <!-- 1. Goal -->
+  <rect x="40" y="105" width="210" height="385" rx="12" class="panel"/>
+  <circle cx="64" cy="133" r="12" fill="#57606a"/><text x="64" y="138" class="num" text-anchor="middle">1</text>
+  <text x="84" y="139" class="h">Goal</text>
+  <circle cx="145" cy="190" r="20" fill="#d0d7de"/>
+  <path d="M105,250 a40,32 0 0 1 80,0 z" fill="#d0d7de"/>
+  <text x="60" y="282" class="b">A person or a process</text>
+  <text x="60" y="301" class="b">hands over a goal and</text>
+  <text x="60" y="320" class="b">the facts it needs.</text>
+  <rect x="58" y="338" width="174" height="56" rx="8" class="card"/>
+  <text x="70" y="361" class="b" font-style="italic">“File this insurance</text>
+  <text x="70" y="380" class="b" font-style="italic">claim for the caller.”</text>
+  <text x="60" y="428" class="bs">The result returns to</text>
+  <text x="60" y="447" class="bs">the same interaction.</text>
+
+  <path d="M252,200 L297,200" class="arrowg"/>
+  <path d="M298,438 L253,438" class="arrowg"/>
+
+  <!-- 2. Agent -->
+  <rect x="300" y="105" width="270" height="385" rx="12" class="panel"/>
+  <circle cx="324" cy="133" r="12" fill="#57606a"/><text x="324" y="138" class="num" text-anchor="middle">2</text>
+  <text x="344" y="139" class="h">Agent</text>
+  <rect x="318" y="160" width="234" height="74" rx="8" class="card"/>
+  <text x="332" y="185" class="bs">Model and instructions</text>
+  <text x="332" y="205" class="b">Plans the next step, then</text>
+  <text x="332" y="223" class="b">uses a tool to carry it out.</text>
+  <text x="318" y="266" class="s">Built in this lab in two ways:</text>
+  <rect x="318" y="278" width="234" height="54" rx="27" fill="#ffffff" stroke="#8250df" stroke-width="1.8"/>
+  <text x="340" y="301" class="bs">Microsoft Copilot Studio</text>
+  <text x="340" y="320" class="s">low-code</text>
+  <rect x="318" y="342" width="234" height="54" rx="27" fill="#ffffff" stroke="#1a7f37" stroke-width="1.8"/>
+  <text x="340" y="365" class="bs">Microsoft Foundry</text>
+  <text x="340" y="384" class="s">pro-code hosted agent</text>
+  <text x="318" y="428" class="s">Both carry out the same task</text>
+  <text x="318" y="446" class="s">on the same kind of Cloud PC.</text>
+
+  <!-- 3. Windows 365 for Agents -->
+  <rect x="660" y="105" width="500" height="385" rx="12" class="accent"/>
+  <path d="M672,105 h476 a12,12 0 0 1 12,12 v31 h-500 v-31 a12,12 0 0 1 12,-12 z" fill="#0f6cbd"/>
+  <circle cx="684" cy="133" r="12" fill="#ffffff"/><text x="684" y="138" class="numb" text-anchor="middle">3</text>
+  <text x="704" y="139" class="hw">Windows 365 for Agents</text>
+  <text x="680" y="176" class="b">Managed Cloud PCs where the agent does the work</text>
+
+  <text x="680" y="205" class="s">Cloud PC agent pool</text>
+  <g>
+    <rect x="680" y="214" width="34" height="23" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/><rect x="692" y="238" width="10" height="5" fill="#8c959f"/>
+    <rect x="724" y="214" width="34" height="23" rx="3" fill="#0f6cbd" stroke="#0f6cbd" stroke-width="1.5"/><rect x="736" y="238" width="10" height="5" fill="#0f6cbd"/>
+    <rect x="768" y="214" width="34" height="23" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/><rect x="780" y="238" width="10" height="5" fill="#8c959f"/>
+    <rect x="812" y="214" width="34" height="23" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1.5"/><rect x="824" y="238" width="10" height="5" fill="#8c959f"/>
+  </g>
+  <text x="866" y="224" class="b">Check out, work, check in.</text>
+  <text x="866" y="243" class="s">Each Cloud PC is reset after use.</text>
+
+  <!-- Cloud PC with an existing app -->
+  <rect x="680" y="262" width="290" height="176" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="2"/>
+  <rect x="805" y="438" width="40" height="12" fill="#57606a"/>
+  <rect x="780" y="450" width="90" height="6" rx="3" fill="#57606a"/>
+  <rect x="696" y="276" width="258" height="148" rx="4" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+  <rect x="696" y="276" width="258" height="24" rx="4" fill="#e6edf5"/>
+  <text x="706" y="293" class="s dark">Existing Windows app</text>
+  <rect x="710" y="314" width="62" height="8" rx="2" fill="#d0d7de"/><rect x="782" y="310" width="156" height="16" rx="2" fill="#ffffff" stroke="#afb8c1"/>
+  <rect x="710" y="340" width="62" height="8" rx="2" fill="#d0d7de"/><rect x="782" y="336" width="156" height="16" rx="2" fill="#ffffff" stroke="#afb8c1"/>
+  <rect x="710" y="366" width="62" height="8" rx="2" fill="#d0d7de"/><rect x="782" y="362" width="156" height="16" rx="2" fill="#ffffff" stroke="#afb8c1"/>
+  <rect x="868" y="392" width="70" height="20" rx="3" fill="#0f6cbd"/>
+  <path d="M902,398 l0,16 l4,-4 l3,7 l3,-1.5 l-3,-7 l5.5,0 z" fill="#ffffff" stroke="#1f2328" stroke-width="1"/>
+
+  <text x="990" y="285" class="bs">Cloud PC for Agents</text>
+  <text x="990" y="306" class="s">Joined to Microsoft Entra ID</text>
+  <text x="990" y="324" class="s">and managed by Intune.</text>
+  <text x="990" y="356" class="s">The app has no API, so</text>
+  <text x="990" y="374" class="s">the agent works through</text>
+  <text x="990" y="392" class="s">the screen, as a person</text>
+  <text x="990" y="410" class="s">would: mouse and keyboard.</text>
+
+  <!-- observe / act loop between agent and Cloud PC (drawn last so it sits on top) -->
+  <path d="M572,322 L677,322" class="arrow"/>
+  <text x="590" y="300" class="bs blue">Act</text>
+  <text x="590" y="314" class="s">click, type</text>
+  <path d="M679,402 L575,402" class="arrow"/>
+  <text x="590" y="426" class="bs blue">Observe</text>
+  <text x="590" y="441" class="s">the screen</text>
+
+  <!-- Governance band -->
+  <rect x="40" y="515" width="1120" height="95" rx="12" class="panel"/>
+  <text x="60" y="542" class="s">Throughout the run</text>
+  <rect x="60" y="552" width="340" height="46" rx="8" class="card"/>
+  <text x="76" y="572" class="bs">Microsoft Entra ID</text>
+  <text x="76" y="589" class="s">Sign-in for people; identities for agents</text>
+  <rect x="430" y="552" width="340" height="46" rx="8" class="card"/>
+  <text x="446" y="572" class="bs">Microsoft Intune</text>
+  <text x="446" y="589" class="s">Cloud PC policy and app delivery</text>
+  <rect x="800" y="552" width="340" height="46" rx="8" class="card"/>
+  <text x="816" y="572" class="bs">People stay informed</text>
+  <text x="816" y="589" class="s">Progress and the result shown in the interaction</text>
+</svg>

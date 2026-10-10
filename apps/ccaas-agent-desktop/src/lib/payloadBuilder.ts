@@ -2,31 +2,25 @@ import type { CallContext, TargetBackend } from "@/types/contracts";
 import type { HeroScenario, AgentIdentity } from "@/types/domain";
 
 /**
- * Build a monotonically-increasing request ID of the form REQ-YYYY-NNNN.
- * The numeric suffix is derived from a localStorage counter so successive
- * handoffs from the same browser don't collide and the format always
- * matches the schema pattern `^REQ-[0-9]{4}-[0-9]{4,}$`.
+ * Build a request ID of the form REQ-YYYY-NNNNNNNNNNNN. The 12-digit suffix is
+ * random (crypto), so IDs are new for every claim, do not collide across
+ * browsers, and cannot be guessed from a previous one. It always matches the
+ * schema pattern `^REQ-[0-9]{4}-[0-9]{4,}$`.
  */
 const REQ_COUNTER_KEY = "ccaas:request-counter";
+const SUFFIX_DIGITS = 12;
 
 export function generateRequestId(now: Date = new Date()): string {
   const year = String(now.getUTCFullYear()).padStart(4, "0");
-  let counter = 1;
-  try {
-    const raw = window.localStorage.getItem(REQ_COUNTER_KEY);
-    counter = raw ? Math.max(1, parseInt(raw, 10) + 1) : 1;
-    window.localStorage.setItem(REQ_COUNTER_KEY, String(counter));
-  } catch {
-    // SSR / locked-down storage fallback
-    counter = Math.floor(1000 + Math.random() * 9000);
-  }
-  const suffix = String(counter).padStart(4, "0");
+  const bytes = new Uint8Array(SUFFIX_DIGITS);
+  globalThis.crypto.getRandomValues(bytes);
+  const suffix = Array.from(bytes, (b) => String(b % 10)).join("");
   return `REQ-${year}-${suffix}`;
 }
 
 /**
- * Reset the counter — only used by the "Reset demo state" Settings action
- * and by tests that need a deterministic starting point.
+ * Clears the counter left by earlier builds. Used by the "Reset demo state"
+ * action; IDs no longer depend on it.
  */
 export function resetRequestIdCounter(): void {
   try {

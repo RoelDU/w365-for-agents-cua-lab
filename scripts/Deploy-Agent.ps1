@@ -36,7 +36,7 @@
       - Pointing Computer Use at the Cloud PC is a single click in the agent's
         Settings -> Connections (refresh before each demo).
     Optional enterprise scale-out (documented, not baked in - see
-    docs\agent-cua-setup.md): governed Entra Agent ID blueprints and a Windows 365
+    docs\\install\\06-foundry-path.md): governed Entra Agent ID blueprints and a Windows 365
     for Agents pool (session API). Not needed for the demo.
 
 .NOTES
@@ -67,7 +67,7 @@ param(
     [string]$ProjectEndpoint,
 
     # The model deployment the agent uses. Computer Use needs the access-gated
-    # 'computer-use-preview' deployment (see docs\agent-cua-setup.md).
+    # 'computer-use-preview' deployment (see docs\\install\\06-foundry-path.md).
     [string]$ModelDeploymentName = "computer-use-preview",
 
     [string]$AgentName = "Zava Claims Intake (CUA)",
@@ -137,7 +137,7 @@ trap {
     Write-Host $_.Exception.Message -ForegroundColor Red
     Write-Host "==========================================================================" -ForegroundColor Red
     Write-Host "The script is idempotent - fix the issue above and re-run; completed steps are reused." -ForegroundColor Yellow
-    Write-Host "Full reference: docs\agent-cua-setup.md (Troubleshooting)." -ForegroundColor Yellow
+    Write-Host "Full reference: docs\\install\\06-foundry-path.md (Troubleshooting)." -ForegroundColor Yellow
     exit 1
 }
 
@@ -1014,7 +1014,7 @@ if ($WhatIfPreference) {
     Write-Host "Re-run without -WhatIf to create/update the agent." -ForegroundColor Yellow
     return
 }
-Write-Host "Agent provisioned. To finish (see docs\agent-cua-setup.md):" -ForegroundColor White
+Write-Host "Agent provisioned. To finish (see docs\\install\\06-foundry-path.md):" -ForegroundColor White
 Write-Host "  THE ONE MANUAL STEP:"
 Write-Host "    - Approve '$ModelName' access (human gate: https://aka.ms/oai/cuaaccess), then re-run"
 Write-Host "      with -CreateModelDeployment if you haven't deployed the model yet."
