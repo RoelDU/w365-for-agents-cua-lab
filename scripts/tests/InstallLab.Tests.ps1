@@ -97,7 +97,7 @@ Describe 'Guided setup: the whole journey from a fresh copy (both paths)' {
     It 'second run resumes, keeps the Foundry order, asks before consent and turn-on, and finishes ready' {
         $F.Bot = $true; $F.Flow = $true; $F.Pool = $true
         $F.Prompts.Clear()
-        Set-FakeAnswers @('yes', 'yes', 'yes', 'yes')
+        Set-FakeAnswers @('yes', 'yes', 'yes', '', 'yes', 'yes')
         $all = @(Invoke-LabSetup -StatePath $statePath 6>&1)
         $r = @($all | Where-Object { $_.PSObject.Properties['Status'] })[-1]
         $text = ($all | Where-Object { -not $_.PSObject.Properties['Status'] } | Out-String)
@@ -137,9 +137,9 @@ Describe 'Guided setup: the whole journey from a fresh copy (both paths)' {
         (Test-Path (Join-Path $root 'scripts\foundry-demo-prep\foundry-demo.config.json')) | Should Be $true
     }
 
-    It 'a third run finds everything done and changes nothing' {
+    It 'a third run rechecks preparation in the portal and changes nothing' {
         $before = $F.Calls.Count; $scripts = $F.Scripts.Count
-        Set-FakeAnswers @()
+        Set-FakeAnswers @('', 'yes')
         $r = Invoke-LabSetup -StatePath $statePath 6>$null
         $r.Status | Should Be 'ReadyUnverified'
         @($F.Calls | Select-Object -Skip $before | Where-Object { $_ -match ' (create|set|add|patch)( |$)|^New-Demo|^dataverse POST' -and $_ -notmatch '^account set' }).Count | Should Be 0
@@ -318,7 +318,7 @@ Describe 'Guided setup: failure, missing permission and existing resources' {
         Reset-LabFake
         $s = New-ReadyChoices 'foundry'
         $s.found = @{ agentIdentityId = 'agent-identity'; blueprintId = 'blueprint-app'; agentUserId = 'agent-user'; imageDigest = 'sha256:' + ('a' * 64) }
-        $ctx = @{ State = $s; Paths = (Get-LabPaths -StatePath (Join-Path $root 'scripts\f5.local.json')); Preview = $false; DeviceCode = $false; RanThisRun = @{ 'foundry-pool' = $true } }
+        $ctx = @{ State = $s; Paths = (Get-LabPaths -StatePath (Join-Path $root 'scripts\f5.local.json')); Preview = $false; DeviceCode = $false; RanThisRun = @{ 'foundry-pool' = $true; 'foundry-preparation-confirmed' = 'pool-1' } }
         Set-FakeAnswers @('no')
         $err = $null; try { & (Get-Stage $s 'foundry-enable').Apply $ctx 6>$null } catch { $err = $_.Exception.Message }
         $err | Should Match 'keep the Foundry agent off'
@@ -368,6 +368,125 @@ Describe 'Guided setup: failure, missing permission and existing resources' {
         }
         @(Get-LabStages (New-ReadyChoices 'mcs') | Where-Object { $_.Id -like 'foundry-*' }).Count | Should Be 0
         @(Get-LabStages (New-ReadyChoices 'foundry') | Where-Object { $_.Id -like 'mcs-*' -or $_.Id -eq 'tenant-prep' }).Count | Should Be 0
+    }
+}
+
+Describe 'Foundry provisioning-time app readiness' {
+    . (Join-Path $here 'LabFakes.ps1')
+    $root = New-LabCopy
+    foreach ($p in $labParts) { . (Join-Path $root "scripts\lab\$p.ps1") }
+    . (Join-Path $here 'LabFakes.ps1')
+    $global:LabReadinessTestCopy = $root
+    AfterAll { if ($global:LabReadinessTestCopy) { Remove-Item -Recurse -Force -LiteralPath $global:LabReadinessTestCopy -ErrorAction SilentlyContinue } }
+
+    function New-PreparationCtx {
+        Reset-LabFake
+        $F.Pool = $true
+        $s = New-ReadyChoices 'foundry'
+        $s.found = @{ agentUserId = 'agent-user' }
+        return @{ State = $s; Paths = (Get-LabPaths -StatePath (Join-Path $root 'preparation.local.json')); Preview = $false; DeviceCode = $false; RanThisRun = @{} }
+    }
+
+    It 'does not treat agent membership or an old confirmation as app readiness' {
+        $ctx = New-PreparationCtx
+        $ctx.State.found.foundryPoolConfirmedAt = '2026-10-01T00:00:00Z'
+        $r = & (Get-Stage $ctx.State 'foundry-pool').Check $ctx
+        $r.Done | Should Be $false
+        $r.Detail | Should Match 'readiness has not been confirmed this run'
+        $ctx.State.found.foundryPoolId | Should Be 'pool-1'
+        $F.Scripts.Count | Should Be 0
+    }
+
+    It 'guides the supported recommended preparation path without treating grouping as equivalent' {
+        $ctx = New-PreparationCtx
+        $stage = Get-Stage $ctx.State 'foundry-pool'
+        $guide = (& $stage.Guide $ctx) -join "`n"
+        $stage.Purpose | Should Match 'Microsoft recommends'
+        $guide | Should Match 'Create > Automatic'
+        $guide | Should Match 'f1346770-5b25-470b-88bd-d5744ab7952c'
+        $guide | Should Match 'explicitly select the Zava Claims Workstation'
+        $guide | Should Match 'Required.*System context'
+        $guide | Should Match 'Link Autopilot device preparation policy'
+        $guide | Should Match 'Prevent connection.*enabled'
+        $guide | Should Match 'all its Cloud PCs are deleted and recreated'
+        $guide | Should Match 'public preview'
+    }
+
+    It 'labels current portal confirmation as manual rather than automatically verified' {
+        $ctx = New-PreparationCtx
+        $stage = Get-Stage $ctx.State 'foundry-pool'
+        & $stage.Check $ctx | Out-Null
+        Set-FakeAnswers @('yes')
+        & $stage.Confirm $ctx 6>$null
+        $r = & $stage.Check $ctx
+        $r.Done | Should Be $true
+        $r.Earlier | Should Be $true
+        $r.Detail | Should Match 'confirmed by you this run, not read by setup'
+        $ctx.RanThisRun['foundry-preparation-confirmed'] | Should Be 'pool-1'
+        $ctx.State.found.ContainsKey('foundry-preparation-confirmed') | Should Be $false
+    }
+
+    It 'does not accept confirmation about a different pool' {
+        $ctx = New-PreparationCtx
+        $ctx.RanThisRun['foundry-preparation-confirmed'] = 'another-pool'
+        (& (Get-Stage $ctx.State 'foundry-pool').Check $ctx).Done | Should Be $false
+    }
+
+    It 'can stop after declining readiness without deploying or changing the pool' {
+        $ctx = New-PreparationCtx
+        Set-FakeAnswers @('', 'no', 'later')
+        $r = Invoke-LabStages @(Get-Stage $ctx.State 'foundry-pool') $ctx 6>$null
+        $r.Status | Should Be 'Waiting'
+        $ctx.RanThisRun.ContainsKey('foundry-preparation-confirmed') | Should Be $false
+        $F.Scripts.Count | Should Be 0
+        @(Get-LabMutations).Count | Should Be 0
+    }
+
+    It 'does not use an old pool confirmation when the pool read fails' {
+        $ctx = New-PreparationCtx
+        $F.DenyPoolRead = $true
+        $ctx.State.found.foundryPoolConfirmedAt = '2026-10-01T00:00:00Z'
+        $r = & (Get-Stage $ctx.State 'foundry-pool').Check $ctx
+        $r.Done | Should Be $false
+        $r.Detail | Should Match 'could not read Cloud PC pools'
+    }
+
+    It 'requires both fresh membership and preparation confirmation when Graph cannot read the pool' {
+        $ctx = New-PreparationCtx
+        $F.DenyPoolRead = $true
+        $stage = Get-Stage $ctx.State 'foundry-pool'
+        & $stage.Check $ctx | Out-Null
+        Set-FakeAnswers @('yes', '', 'no')
+        & $stage.Confirm $ctx 6>$null
+        (& $stage.Check $ctx).Done | Should Be $false
+        Set-FakeAnswers @('yes', '', 'yes')
+        & $stage.Confirm $ctx 6>$null
+        $r = & $stage.Check $ctx
+        $r.Done | Should Be $true
+        $r.Earlier | Should Be $true
+        $r.Detail | Should Match 'could not read Cloud PC pools'
+    }
+
+    It 'never deploys enabled execution on membership evidence alone' {
+        $ctx = New-PreparationCtx
+        $ctx.RanThisRun['foundry-pool'] = $true
+        $err = $null
+        try { & (Get-Stage $ctx.State 'foundry-enable').Apply $ctx 6>$null }
+        catch { $err = $_.Exception.Message }
+        $err | Should Match 'readiness was not confirmed this run'
+        $F.Scripts.Count | Should Be 0
+    }
+
+    It 'keeps preview read-only and defers the explicit manual check' {
+        $ctx = New-PreparationCtx
+        $ctx.Preview = $true
+        Set-FakeAnswers @()
+        $r = & (Get-Stage $ctx.State 'foundry-pool').Check $ctx
+        $r.Done | Should Be $false
+        $r.Deferred | Should Be $true
+        $r.Detail | Should Match 'require your portal confirmation'
+        @($F.Prompts).Count | Should Be 0
+        @(Get-LabMutations).Count | Should Be 0
     }
 }
 

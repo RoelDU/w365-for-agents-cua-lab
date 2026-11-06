@@ -327,6 +327,10 @@ Do this once, after the first hosted version from step 5.5 is active.
    gateway answered 403 to Python's default one. Read-only check:
    `GET /deviceManagement/virtualEndpoint/cloudPcPools/{pool-id}/assignments` must list the agent
    user. Rollback: remove the agent from the pool's **Agents** page.
+   **Assignment alone is not app readiness.** Complete page 2, section 2.6's recommended
+   Automatic Device Preparation configuration, keep connection blocked on installation
+   failure/time-out, and verify successful Claims installation before turning execution on.
+   An existing pool needs owner-approved reprovisioning for preparation changes to take effect.
 5. **Fill the values and turn the agent on.** In `deploy\foundry\foundry-agent.local.json` set
    the four `CLAIMS_*_ID` values from step 3, `LIVE_EXECUTION_APPROVED` = `yes` and
    `CLAIMS_EXECUTION_APPROVED` = `yes`, and set `expectedInstanceIdentityClientId` to the agent
@@ -348,8 +352,9 @@ each with `DELETE /oauth2PermissionGrants/<id>`. The script has no remove mode.
 
 ## 5.8 What is not scripted here
 
-- creating the Windows 365 for Agents pool itself (page 2, step 2.6, Intune portal), because
-  the pool's billing plan, size and image are tenant decisions;
+- creating the Windows 365 for Agents pool and its Automatic Device Preparation policy,
+  checking preparation/app results, or reprovisioning an existing pool (page 2, step 2.6,
+  Intune portal); billing, size, image and disruptive migration are owner decisions;
 - proving live Claims execution in your tenant (page 7).
 
 Everything else on this page has a command above. Each command that creates or changes

@@ -33,6 +33,13 @@ safeguards apply. You do not need this page to install or present the lab; start
 
 ## Start of every run: getting a Cloud PC
 
+Provisioning-time app readiness is separate from the runtime checks below. For this
+Intune-installed Claims app, use the supported **Automatic Windows Autopilot Device Preparation**
+path Microsoft recommends for app-dependent agents, with Claims explicitly selected and
+connection blocked on installation failure/time-out. See the [installation procedure](../../../docs/install/03-tenant-and-cloud-pcs.md#26-create-the-foundry-cloud-pc-agent-pool).
+Group-only assignment does not validate installation before checkout. The runtime checks
+can stop an unready run; they do not replace preparation or prove that Intune installed Claims.
+
 Both operations, `smoke` and `claims`, start the same way:
 
 1. **Acquire** a Cloud PC with Start Session.

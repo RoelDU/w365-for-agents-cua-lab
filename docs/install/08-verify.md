@@ -10,7 +10,26 @@ On each Cloud PC pool, confirm the Claims app is installed:
 C:\Program Files\Business Applications\Zava Claims Workstation\claims.exe
 ```
 
-If it is missing, check the Intune Win32 app assignment, device group membership, and ESP policy. Required apps may install after first sign-in if ESP does not block on them.
+**Foundry:** before enabling transfers, verify the provisioning policy links the **Automatic
+Device Preparation policy**, that the exact Claims Win32 app is both selected in that policy
+and Required for its assigned device group in System context, and that **Prevent connection to
+Cloud PC upon installation failure or time-out** remains selected. In **Devices > Enrollment >
+Monitor > Windows Autopilot device preparation deployment status**, check successful
+preparation and successful Claims installation for the provisioned PCs. Record the pool/policy,
+preparation policy, group and app IDs and the result/time. An agent assignment, an available
+session count, or `get_screen_size` replying is not evidence that Claims installed.
+
+If upgrading a group-only Foundry pool, confirm the owner-approved reprovision completed after
+the policy change; old PCs are not updated just by editing the policy. See
+[section 2.6](03-tenant-and-cloud-pcs.md#26-create-the-foundry-cloud-pc-agent-pool).
+The installer asks for a fresh portal confirmation each run and labels it manual, not an
+automated verification of these settings. A failed, timed-out, skipped or unverified Claims
+installation is not a successful readiness check: resolve it before transfers.
+
+**MCS:** keep its separate partner-managed pool procedure. If Claims is missing, check the
+Intune Win32 app assignment, device group membership, and the MCS pool's applicable ESP policy.
+Required apps may install after first sign-in if ESP does not block on them. Do not apply the
+Foundry preparation procedure to MCS as though the pool models were interchangeable.
 
 ## 7.2 Handoff service health
 

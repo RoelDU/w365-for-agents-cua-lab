@@ -262,6 +262,7 @@ function Invoke-LabPython {
 
 function Invoke-LabGraphPs {
     param([string]$Uri, [string]$TenantId, [string[]]$Scopes, [switch]$DeviceCode)
+    if ($global:F.DenyPoolRead -and $Uri -like '*cloudPcPools*') { throw 'Cloud PC pool read refused (offline test).' }
     if ($Uri -like '*configurationPolicies*') { throw 'Graph PowerShell sign-in refused (offline test).' }
     if ($Uri -like '*/assignments') { return [pscustomobject]@{ value = @($(if ($global:F.Pool) { @{ userPrincipalId = 'agent-user' } })) } }
     return [pscustomobject]@{ value = @([pscustomobject]@{ id = 'pool-1'; displayName = 'Zava Foundry pool' }) }

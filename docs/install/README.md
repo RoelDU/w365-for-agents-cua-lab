@@ -131,7 +131,7 @@ changing anything else that already existed.
 | 16 | Create the Foundry agent (switched off) | Foundry creates the agent's own identity | You | Version active, identity known |
 | 17 | Create the agent user and consent its permissions | Three delegated permissions for Windows 365 | Agent ID Administrator + Privileged Role Administrator | Nothing left to change |
 | 18 | Deliver the Claims app to the Foundry pool's devices | Same app, for the Foundry Cloud PCs | Intune Administrator | Claims app assigned to the group |
-| 19 | **Portal:** create the Foundry agent's Cloud PC pool | Billing, size and image are your decisions | Intune Administrator | The pool lists the agent |
+| 19 | **Portal:** create the Foundry agent's Cloud PC pool with Device Preparation | Claims must install before checkout; billing, size and image are your decisions | Intune Administrator | Agent membership read or confirmed; linked Automatic preparation, failure blocking and Claims installation manually verified |
 | 20 | Turn the Foundry agent on | Only after identity and pool are ready | You, with explicit yes | New version active with execution on |
 | 21 | Connect the handoff service to the agents | Writes the IDs and addresses it found | You | All settings match |
 | 22 | Build and publish Zava | With this lab's sign-in app, addresses and region | You | Zava serves the right settings, and its region matches the handoff service |
@@ -163,9 +163,15 @@ What to expect at each:
   agent. Setup prints each trigger and action with the exact table, agent and expressions. No
   trigger inside the agent is needed for the run history.
 - **Step 19, Foundry pool.** A provisioning policy (agents) in the Intune admin center, with your
-  billing policy, the agent setup created, and the device group from step 18. Setup then finds
-  the pool with a Microsoft Graph sign-in. If your account cannot read pools, setup asks you to
-  confirm in the portal instead and says that it did not check this itself.
+  billing policy and the agent setup created. Link an **Automatic Windows Autopilot Device
+  Preparation policy** using the assigned device group from step 18, with Claims explicitly
+  selected and connection blocked on installation failure/time-out. This is the supported path
+  Microsoft recommends for agents needing specific installed apps; grouping/preparation is
+  public preview. Setup finds agent membership with Microsoft Graph, or asks you to confirm it
+  if your account cannot read pools. It **cannot read preparation settings or app results**:
+  each run asks you to verify them in Intune and labels that evidence manual. Existing pools
+  require owner-approved reprovisioning (all pool PCs deleted/recreated) before changed
+  preparation applies. See [section 2.6](03-tenant-and-cloud-pcs.md#26-create-the-foundry-cloud-pc-agent-pool).
 
 ### If setup stops
 

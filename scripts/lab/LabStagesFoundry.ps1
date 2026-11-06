@@ -224,9 +224,9 @@ function Get-LabFoundryStages {
     $stages.Add(@{
             Id = 'foundry-claims-app'; When = 'foundry'; Kind = 'admin'
             Title = 'Deliver the Claims app to the Foundry pool''s devices'
-            Purpose = 'A Windows 365 for Agents pool puts its Cloud PCs in an assigned group you choose. Setup creates that group and assigns the Claims app to it.'
+            Purpose = 'Setup creates an assigned device group and assigns Claims as Required. The next portal step uses this group in Automatic Device Preparation so Claims installs before agent checkout.'
             Who = 'Intune Administrator (signs in when asked)'
-            Plan = { param($Ctx) "Run scripts\Deploy-DemoEnvironment.ps1 for device group '$($Ctx.State.choices.foundryDeviceGroup)' (empty until the pool fills it)." }
+            Plan = { param($Ctx) "Run scripts\Deploy-DemoEnvironment.ps1 for device group '$($Ctx.State.choices.foundryDeviceGroup)' (empty until Device Preparation adds the Cloud PCs)." }
             Check = { param($Ctx) Get-LabIntuneStageResult $Ctx 'foundry-claims-app' 'Zava Claims Workstation' $Ctx.State.choices.foundryDeviceGroup }
             Apply = {
                 param($Ctx)
@@ -242,14 +242,16 @@ function Get-LabFoundryStages {
     $stages.Add(@{
             Id = 'foundry-pool'; When = 'foundry'; Kind = 'portal'; Interactive = $true
             Title = 'Create the Foundry agent''s Cloud PC pool'
-            Purpose = 'Billing plan, pool size and image are your decisions, so the pool is created in the Intune admin center. You add the agent to it there.'
+            Purpose = 'Use the supported Autopilot Device Preparation path Microsoft recommends for agents needing specific apps. Billing, size, image and preparation are configured in Intune; setup never reprovisions a pool.'
             Who = 'Intune Administrator with access to the Windows 365 for Agents billing policy'
-            Plan = { param($Ctx) "Portal: provisioning policy (agents) with agent $($Ctx.State.choices.agentName) and device group '$($Ctx.State.choices.foundryDeviceGroup)'. Setup then finds the pool with a Microsoft Graph sign-in (CloudPC.Read.All)." }
+            Plan = { param($Ctx) "Portal: Automatic Device Preparation using group '$($Ctx.State.choices.foundryDeviceGroup)' and the Required Claims app; link it to the provisioning policy (agents) for $($Ctx.State.choices.agentName), blocking connection on installation failure/time-out. Graph checks agent membership only; you confirm preparation and successful app installation each run." }
             Check = {
                 param($Ctx)
                 $f = $Ctx.State.found
                 if (-not $f.agentUserId) { return (New-LabResult $false 'Waiting for the agent user.') }
-                if ($Ctx.Preview) { return [pscustomobject]@{ Done = $false; Deferred = $true; Detail = 'Checked when setup runs (needs a Microsoft Graph sign-in).' } }
+                if ($Ctx.Preview) { return [pscustomobject]@{ Done = $false; Deferred = $true; Detail = 'Agent membership checked when setup runs (Microsoft Graph sign-in); Device Preparation settings and successful Claims installation require your portal confirmation.' } }
+                if (-not $Ctx.RanThisRun) { $Ctx.RanThisRun = @{} }
+                $Ctx.RanThisRun.Remove('foundry-pool')
                 $Ctx.State.found.Remove('poolReadError')
                 try {
                     $pools = Invoke-LabGraphPs -Uri 'https://graph.microsoft.com/beta/deviceManagement/virtualEndpoint/cloudPcPools' -TenantId $Ctx.State.choices.tenantId -DeviceCode:$Ctx.DeviceCode
@@ -258,16 +260,20 @@ function Get-LabFoundryStages {
                         if (($as | ConvertTo-Json -Depth 10) -like "*$($f.agentUserId)*") {
                             Set-LabFound $Ctx.State 'foundryPoolId' $p.id
                             Set-LabFound $Ctx.State 'foundryPoolName' $p.displayName
-                            if ($Ctx.RanThisRun) { $Ctx.RanThisRun['foundry-pool'] = $true }
-                            return (New-LabResult $true "Pool '$($p.displayName)' ($($p.id)) includes the agent")
+                            $Ctx.RanThisRun['foundry-pool'] = $true
+                            if ($Ctx.RanThisRun['foundry-preparation-confirmed'] -eq $p.id) {
+                                return (New-LabEarlierResult "Pool '$($p.displayName)' includes the agent (read now); Device Preparation and successful Claims installation confirmed by you this run, not read by setup.")
+                            }
+                            return (New-LabResult $false "Pool '$($p.displayName)' includes the agent, but provisioning-time Claims readiness has not been confirmed this run.")
                         }
                     }
                 }
                 catch {
                     # Only when the live read is impossible does a person's confirmation count.
                     $Ctx.State.found.poolReadError = Get-LabShortText $_.Exception.Message 300
-                    if ($Ctx.RanThisRun -and $Ctx.RanThisRun['foundry-pool-confirmed']) { return (New-LabEarlierResult 'Confirmed by you in the Intune admin center during this run; setup could not read Cloud PC pools with your sign-in.') }
-                    if ($f.foundryPoolConfirmedAt) { return (New-LabEarlierResult "Confirmed by you in the Intune admin center on $($f.foundryPoolConfirmedAt); setup could not read Cloud PC pools with your sign-in.") }
+                    if ($Ctx.RanThisRun['foundry-pool-confirmed'] -and $Ctx.RanThisRun['foundry-preparation-confirmed']) {
+                        return (New-LabEarlierResult 'Agent membership, Device Preparation and successful Claims installation confirmed by you this run; setup could not read Cloud PC pools with your sign-in.')
+                    }
                     return (New-LabResult $false "Setup could not read Cloud PC pools: $($Ctx.State.found.poolReadError)")
                 }
                 New-LabResult $false "No Cloud PC pool includes agent user $($Ctx.State.choices.agentUserUpn) yet."
@@ -277,25 +283,37 @@ function Get-LabFoundryStages {
                 $c = $Ctx.State.choices
                 @(
                     'Before you start: a billing policy with Windows 365 for Agents turned on must exist (Microsoft 365 admin center > Copilot > Cost management > classic Billing & usage > Billing policies; prerequisites page, section 0.1).',
-                    '1. Open https://intune.microsoft.com > Devices > Provision Cloud PCs > Provisioning policies (Agents) > Create policy.',
+                    '1. Open https://intune.microsoft.com > Devices > Provision Cloud PCs > Provisioning policies (Agents). Edit the existing policy if it already lists this agent; otherwise select Create policy.',
                     '2. Choose that billing policy, the number of Cloud PCs (1 is enough for the lab) and the geography.',
                     "3. On the Agents page select Add Agents and choose the Foundry agent '$($c.agentName)' (agent user $($c.agentUserUpn)).",
                     '4. Choose the image.',
-                    "5. Under Device grouping and preparation select the group '$($c.foundryDeviceGroup)'. Setup already assigned the Claims app to it.",
-                    '6. Create the policy. Cloud PCs take a while to provision; the agent can work once one is ready.',
-                    'Expected result: the policy''s Agents page lists the agent.'
+                    "5. In Groups, check '$($c.foundryDeviceGroup)' is Security / Assigned and dedicated to this preparation policy. Add Intune Provisioning Client (AppId f1346770-5b25-470b-88bd-d5744ab7952c) as an owner. Its name can also be Intune Autopilot ConfidentialClient; match the AppId.",
+                    "6. Devices > Windows > Enrollment > Device preparation policies > Create > Automatic: select '$($c.foundryDeviceGroup)' and explicitly select the Zava Claims Workstation Win32 app in Apps. Check it is Required for that group and installs in System context. Assignment alone is not enough.",
+                    '7. Back in the provisioning policy (agents), Configuration > Device grouping and preparation: choose Link Autopilot device preparation policy and select that Automatic policy, not the group-only option.',
+                    '8. Set Minutes allowed before device preparation fails to allow the Claims installation. Keep Prevent connection to Cloud PC upon installation failure or time-out enabled (the default).',
+                    '9. Create the policy. For an EXISTING pool, changing preparation requires owner-approved Reprovision: all its Cloud PCs are deleted and recreated, causing downtime. Setup does not do this. Type later until the owner has approved and completed it.',
+                    '10. Wait for successful preparation and verify Claims installed in Devices > Enrollment > Monitor > Windows Autopilot device preparation deployment status. Agent membership or an available PC count is not app-readiness evidence.',
+                    'See docs\install\03-tenant-and-cloud-pcs.md section 2.6 for prerequisites and the supported group-only alternative (not the guided default). Device grouping/preparation is public preview.',
+                    'Microsoft support and recommendation: https://learn.microsoft.com/en-us/windows-365/agents/device-grouping-preparation',
+                    'Automatic preparation tutorial: https://learn.microsoft.com/en-us/autopilot/device-preparation/tutorial/automatic/automatic-workflow',
+                    'Expected result: the policy lists the agent, links Automatic Device Preparation with Claims selected, blocks connection on installation failure/time-out, and preparation has succeeded.'
                 )
             }
             Confirm = {
                 param($Ctx)
-                if (-not $Ctx.State.found.poolReadError) { return }
-                Write-LabWarn "Setup could not read the pool itself ($($Ctx.State.found.poolReadError))."
-                Write-LabWarn "Check in the Intune admin center instead: Devices > Provision Cloud PCs > Provisioning policies (Agents) > your policy > Agents must list '$($Ctx.State.choices.agentName)'."
-                if (Confirm-Lab 'Does the policy list the agent?') {
+                if ($Ctx.State.found.poolReadError) {
+                    Write-LabWarn "Setup could not read the pool itself ($($Ctx.State.found.poolReadError))."
+                    Write-LabWarn "Check in the Intune admin center instead: Devices > Provision Cloud PCs > Provisioning policies (Agents) > your policy > Agents must list '$($Ctx.State.choices.agentName)'."
+                    if (-not (Confirm-Lab 'Does the policy list the agent?')) { return }
                     $Ctx.State.found.foundryPoolConfirmedAt = (Get-Date).ToUniversalTime().ToString('o')
-                    if ($Ctx.RanThisRun) { $Ctx.RanThisRun['foundry-pool-confirmed'] = $true }
+                    $Ctx.RanThisRun['foundry-pool-confirmed'] = $true
                     $id = [string](Read-Host '  Pool ID, only if you have it (used for the optional availability check; press Enter to skip)')
                     if ($id.Trim() -match '^[0-9a-fA-F-]{36}$') { Set-LabFound $Ctx.State 'foundryPoolId' $id.Trim() }
+                }
+                elseif (-not $Ctx.RanThisRun['foundry-pool']) { return }
+                Write-LabWarn 'Setup has NOT read Device Preparation settings or app installation results. Check the linked Automatic policy, selected Claims app, failure/time-out connection block and successful preparation in Intune. Any required reprovision must be complete.'
+                if (Confirm-Lab 'Have you verified Device Preparation with Claims selected, connection blocked on failure/time-out, and successful preparation for this pool now?') {
+                    $Ctx.RanThisRun['foundry-preparation-confirmed'] = $(if ($Ctx.State.found.foundryPoolId) { $Ctx.State.found.foundryPoolId } else { 'portal-confirmed' })
                 }
             }
         })
@@ -323,6 +341,9 @@ function Get-LabFoundryStages {
             }
             Apply = {
                 param($Ctx)
+                if (-not ($Ctx.RanThisRun -and $Ctx.RanThisRun['foundry-preparation-confirmed'])) {
+                    throw 'Provisioning-time Claims readiness was not confirmed this run. Complete the Foundry pool Device Preparation portal step first; the agent stays off.'
+                }
                 if (-not ($Ctx.RanThisRun -and ($Ctx.RanThisRun['foundry-pool'] -or $Ctx.RanThisRun['foundry-pool-confirmed']))) {
                     # Turning the agent on needs the pool confirmed now, not only on an earlier run.
                     Write-LabWarn "Setup could not read the Cloud PC pool during this run. In the Intune admin center check Devices > Provision Cloud PCs > Provisioning policies (Agents) > your policy > Agents: it must list '$($Ctx.State.choices.agentName)'."

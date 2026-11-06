@@ -266,7 +266,7 @@ function Invoke-LabSetup {
         else {
             Write-Host 'The lab is installed, but not every step could be read back on this run:' -ForegroundColor Yellow
             foreach ($e in $ctx.Earlier) { Write-Host "  - $e" }
-            Write-Host '  These rely on an earlier run or on your own confirmation, because your current sign-in cannot read them.'
+            Write-Host '  These rely on an earlier run or your own confirmation; setup or your current sign-in cannot read the evidence automatically.'
             Write-Host '  If anything may have changed, check them in the portal, or have the named administrator run setup again.'
         }
         Write-Host "  Open Zava: $($state.found.zavaUrl)/"
