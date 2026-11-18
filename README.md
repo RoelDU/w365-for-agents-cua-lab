@@ -19,7 +19,7 @@ platform supports different agent-building choices.
 
 ## Start here
 
-1. **Watch the demo** (8 minutes, English, captions available): [demo video](#demo-video).
+1. **Watch the demo** (8 minutes in English, 9 in Japanese, captions available): [demo video](#demo-video).
 2. **Check the [prerequisites](docs/install/01-prerequisites.md)** for both agent paths.
 3. **Install** in your own tenant with the [install guide](docs/install/README.md): download the
    ZIP and run the guided setup, `scripts\Install-Lab.ps1`.
@@ -104,7 +104,12 @@ What each path proves about the claim number is described under [Known limitatio
 **[Watch or download the demo video](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/v2026.10.0/w365-agents-zava-demo-en-2026-10.mp4)** (MP4, 8 minutes, English) ·
 [captions (SRT)](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/v2026.10.0/w365-agents-zava-demo-en-2026-10.srt) · [release v2026.10.0](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/tag/v2026.10.0)
 
-Recorded on 10 October 2026 in the author's reference environment, with AI-generated narration.
+**日本語版 / Japanese version: [デモ動画を見る・ダウンロード](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/v2026.10.0/w365-agents-zava-demo-ja-2026-10.mp4)** (MP4, 9 minutes, Japanese narration and captions) ·
+[字幕 (SRT)](https://github.com/RoelDU/w365-for-agents-cua-lab/releases/download/v2026.10.0/w365-agents-zava-demo-ja-2026-10.srt).
+The live run uses the Foundry agent with the Claims app in Japanese mode; the Copilot Studio run
+history shown is the earlier English run.
+
+Recorded on 10 October 2026 (Japanese version: 14 October 2026) in the author's reference environment, with AI-generated narration.
 It shows a live Zava transfer to the **Foundry** agent filing a claim on a Windows 365 for Agents
 Cloud PC, then Agent 365, Intune, Copilot Studio (with an earlier, separate Copilot Studio run and
 its screenshot history) and the Foundry agent with its source. Some waiting time is shortened, as
@@ -210,7 +215,8 @@ needs; it needs no checkout or developer tools.
 - **Historical documents:** `docs\CCaaS-Demo-Setup-Guide.docx` (May 2026) describes the retired
   local-orchestrator design. `docs\Zava-CCaaS-Demo.pptx` is the June 2026 overview deck. The two
   June 2026 videos in `apps\ccaas-agent-desktop\docs\media` (English and Japanese) show the
-  earlier Copilot Studio-only version; they are not versions of the current demo video. Use this
+  earlier Copilot Studio-only version; they are not versions of the current demo video (the
+  current Japanese video is in the [demo video](#demo-video) section). Use this
   README and `docs\install` for the current design.
 
 ## Third-party components
