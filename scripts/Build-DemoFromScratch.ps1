@@ -441,8 +441,9 @@ Write-Host "  Power Platform admin center -> Licensing" -ForegroundColor Yellow
 Write-Host "  -> Pay-as-you-go plans -> include the Windows 365 / Hosted RPA product -> bind the" -ForegroundColor Yellow
 Write-Host "  agent's environment. Then set ALWAYS-AVAILABLE in the Windows 365 provisioning policy" -ForegroundColor Yellow
 Write-Host "  in INTUNE (NOT Copilot Studio): Intune admin center -> Devices -> Provision Cloud PCs ->" -ForegroundColor Yellow
-Write-Host "  Provisioning policies (Agents) -> Create policy -> General -> pick the Billing plan and" -ForegroundColor Yellow
-Write-Host "  set 'Always available Cloud PCs' = 1 (~`$5/mo) to avoid cold start. Provisioning takes" -ForegroundColor Yellow
+Write-Host "  Provisioning policies (Agents) -> Create policy -> General -> set 'Always available" -ForegroundColor Yellow
+Write-Host "  Cloud PCs' = 1 to avoid cold start (billing: Copilot Credits spending policy for new" -ForegroundColor Yellow
+Write-Host "  customers, or a legacy billing plan; see docs\install\01-prerequisites.md 0.1). Provisioning takes" -ForegroundColor Yellow
 Write-Host "  ~20-30 min. See docs\install\03-tenant-and-cloud-pcs.md and docs\w365a-pool.md." -ForegroundColor Yellow
 if ($swaResult) {
     Write-Host ""

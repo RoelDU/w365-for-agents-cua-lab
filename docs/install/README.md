@@ -25,7 +25,7 @@ The full inventory, with Microsoft sources and how to check each item, is
 | Microsoft Agent 365, licensed to the people who build and own the agents | Both paths in this lab ([why for Copilot Studio](01-prerequisites.md#05-installer-checkpoints)) |
 | Microsoft Entra ID P1, a standalone Copilot Studio subscription, and a Power Platform environment with Dataverse (or the right to create one) | Copilot Studio path |
 | Windows 365 for Agents billing for the Copilot Studio Cloud PC pool, once the trial allowance is used up; Anthropic models allowed by an administrator | Copilot Studio path |
-| A Windows 365 for Agents billing policy (Microsoft 365 admin center, Copilot > Cost management) | Foundry path |
+| Windows 365 for Agents billing: a Copilot Credits spending policy covering the agent user (Microsoft 365 admin center, Copilot > Cost Management), or an existing legacy billing plan | Foundry path |
 | A region where Foundry hosted agents are offered, with quota for the `gpt-4.1-mini` model | Foundry path |
 | To **view** a finished Copilot Studio run's history (explanations and screenshots) in Copilot Studio **Activity**: an Exchange licence and mailbox for the person viewing, and Microsoft 365 data storage for Copilot Studio left on | Optional, Copilot Studio path ([details](05-mcs-path.md#46-native-run-history-in-copilot-studio-activity)); not needed to run either path |
 
@@ -162,8 +162,9 @@ What to expect at each:
 - **Step 13, trigger flow.** A short automated cloud flow in Power Automate, separate from the
   agent. Setup prints each trigger and action with the exact table, agent and expressions. No
   trigger inside the agent is needed for the run history.
-- **Step 19, Foundry pool.** A provisioning policy (agents) in the Intune admin center, with your
-  billing policy and the agent setup created. Link an **Automatic Windows Autopilot Device
+- **Step 19, Foundry pool.** A provisioning policy (agents) in the Intune admin center, with
+  Windows 365 for Agents billing in place (Copilot Credits spending policy, or a legacy billing
+  plan) and the agent setup created. Link an **Automatic Windows Autopilot Device
   Preparation policy** using the assigned device group from step 18, with Claims explicitly
   selected and connection blocked on installation failure/time-out. This is the supported path
   Microsoft recommends for agents needing specific installed apps; grouping/preparation is

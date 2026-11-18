@@ -19,8 +19,11 @@ billed through different routes:
 
 - **Copilot Studio (MCS) pool:** a pay-as-you-go billing plan for the Power Platform environment.
   Microsoft documents automatic scaling for these pools but no always-available setting.
-- **Windows 365 for Agents (Foundry) pool:** a billing policy in the Microsoft 365 admin center;
-  the Intune provisioning policy (agents) sets how many Cloud PCs are always available.
+- **Windows 365 for Agents (Foundry) pool:** Copilot Credits through a spending policy in the
+  Microsoft 365 admin center (Copilot > Cost Management) that covers the agent user; this is the
+  only option for new customers since November 2026. Existing customers may keep the legacy
+  billing plan. The Intune provisioning policy (agents) sets how many Cloud PCs are always
+  available.
 
 Details and trial limits: [prerequisites, section 0.1](install/01-prerequisites.md#01-products-licences-and-billing-to-have-before-you-start).
 
@@ -31,7 +34,7 @@ Microsoft reference: <https://learn.microsoft.com/en-us/windows-365/agents/billi
 | Problem | Check |
 | --- | --- |
 | No Cloud PC pool option in Copilot Studio | Dataverse environment, Computer Use enabled, tenant prerequisites, environment geography. |
-| Computer Use never starts | Agent authentication, pool availability, billing plan, and tool binding. |
+| Computer Use never starts | Agent authentication, pool availability, billing (Foundry: a spending policy covers the agent user), and tool binding. |
 | Cloud PC stuck at account setup | Review ESP targeting and the optional `Set-AgentPoolEspSkip.ps1` plan. |
 | Claims app missing | Intune required assignment, device group membership, and app detection. |
 

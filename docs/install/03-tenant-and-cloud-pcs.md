@@ -169,7 +169,10 @@ Do this after the Foundry agent exists (page 6, step 5.7), because the pool is a
    The lab needs no additional preparation scripts. Save the policy. See Microsoft's
    [Automatic policy instructions](https://learn.microsoft.com/en-us/autopilot/device-preparation/tutorial/automatic/automatic-autopilot-policy).
 4. Go to **Devices > Provision Cloud PCs > Provisioning policies (Agents) > Create policy**.
-   Choose the Windows 365 for Agents billing plan, Cloud PC count and geography. On **Agents**,
+   Set the Windows 365 for Agents billing (page 0, row "Agent 365 route"): with **Copilot
+   Credits** (the only option for new customers) no billing plan is linked, and a spending policy
+   must cover the agent user; a tenant on the legacy billing plan selects it here. Choose the
+   Cloud PC count and geography. On **Agents**,
    select **Add Agents** and choose the Foundry Claims hosted agent. Choose the image.
 5. On **Configuration > Device grouping and preparation**, choose **Link Autopilot device
    preparation policy** and select the Automatic policy from item 3, not the group-only option.

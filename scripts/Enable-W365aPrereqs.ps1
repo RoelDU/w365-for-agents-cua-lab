@@ -27,9 +27,10 @@
 #     Cloud PC pool -> Add new. There is no supported public API for creating
 #     that Copilot Studio pool object, and it is a once-per-tenant gesture.
 #     See https://learn.microsoft.com/microsoft-copilot-studio/use-cloud-pc-pool
-#   - Set up billing: pay-as-you-go to your Azure subscription ($0.40/hr runtime,
-#     plus $5/Cloud PC/mo if always-available). No reliable free tier - the meter
-#     is live; the demo uses always-available to avoid cold start.
+#   - Set up billing: pay-as-you-go to your Azure subscription, plus a monthly
+#     charge per always-available Cloud PC. Current prices:
+#     https://www.microsoft.com/windows-365/agents/compare-plans-pricing
+#     The meter is live; the demo uses always-available to avoid cold start.
 #   - Set the Intune device-type enrollment restriction (Allow Windows (MDM) for
 #     corporate enrollment) - that is a portal toggle.
 #
@@ -180,7 +181,7 @@ try {
     Write-Host "      'Provisioning policies (Agents)' (that list is correctly EMPTY for the Copilot Studio pool)." -ForegroundColor Yellow
     Write-Host "      Region follows the Power Platform environment geography (a US environment => US Central is normal);" -ForegroundColor Yellow
     Write-Host "      the first GUID in the CPCPool_ name is that environment's id. See docs/w365a-pool.md." -ForegroundColor Yellow
-    Write-Host "  - Confirm billing: pay-as-you-go to your Azure subscription (`$0.40/hr; `$5/Cloud PC/mo if always-available). No reliable free tier - use always-available to avoid cold start." -ForegroundColor Yellow
+    Write-Host "  - Confirm billing: pay-as-you-go to your Azure subscription, plus a monthly charge per always-available Cloud PC (prices: https://www.microsoft.com/windows-365/agents/compare-plans-pricing). Use always-available to avoid cold start." -ForegroundColor Yellow
     Write-Host "  - Intune: device-type enrollment restriction = Allow Windows (MDM) for corporate enrollment." -ForegroundColor Yellow
     if (-not $CreateDynamicGroup) {
         Write-Host "  - Hide the consent prompt: re-run with -CreateDynamicGroup (automates it), or do it manually." -ForegroundColor Yellow

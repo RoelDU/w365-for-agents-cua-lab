@@ -155,7 +155,8 @@ In short, both paths need a Microsoft Entra ID tenant, Microsoft Intune, Microso
 an Azure subscription. The MCS path adds Microsoft Entra ID P1 (for a dynamic device group),
 Copilot Studio, a Power Platform environment with Dataverse, and Windows 365 for Agents billing
 once the Copilot Studio trial allowance is used up. The Foundry path adds a Microsoft Foundry
-project with a model deployment and an active Windows 365 for Agents billing policy.
+project with a model deployment and Windows 365 for Agents billing: for new customers, a Copilot
+Credits spending policy covering the agent user.
 
 After installation, the [presenting guide](docs/install/presenting.md) is all a presenter
 needs; it needs no checkout or developer tools.
@@ -202,6 +203,14 @@ needs; it needs no checkout or developer tools.
   instructions are not an operating-system security boundary.
 - Windows 365 for Agents, Agent 365 tooling and Foundry hosted agents are new services; names,
   APIs and regions can change. Check the linked Microsoft documentation.
+- **Announced in November 2026 and not yet reflected or tested here** (billing for the Foundry
+  pool is updated to Copilot Credits; see [prerequisites](docs/install/01-prerequisites.md)):
+  - Intune's provisioning policy (agents) is now created on a single page; the step lists in
+    `docs\install` still follow the earlier multi-page wizard. The settings are the same.
+  - Copilot Studio's default model changed to GPT-5.5 Chat. The MCS agent has not been re-run
+    since, so its behaviour with the new default is unverified.
+  - Availability of Windows 365 for Agents and Foundry hosted agents in regions other than the
+    reference (Australia East) has not been checked, including Japan.
 
 ## Experimental and retired material
 

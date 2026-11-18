@@ -243,7 +243,7 @@ function Get-LabFoundryStages {
             Id = 'foundry-pool'; When = 'foundry'; Kind = 'portal'; Interactive = $true
             Title = 'Create the Foundry agent''s Cloud PC pool'
             Purpose = 'Use the supported Autopilot Device Preparation path Microsoft recommends for agents needing specific apps. Billing, size, image and preparation are configured in Intune; setup never reprovisions a pool.'
-            Who = 'Intune Administrator with access to the Windows 365 for Agents billing policy'
+            Who = 'Intune Administrator; Windows 365 for Agents billing (Copilot Credits spending policy or legacy billing plan) set up first'
             Plan = { param($Ctx) "Portal: Automatic Device Preparation using group '$($Ctx.State.choices.foundryDeviceGroup)' and the Required Claims app; link it to the provisioning policy (agents) for $($Ctx.State.choices.agentName), blocking connection on installation failure/time-out. Graph checks agent membership only; you confirm preparation and successful app installation each run." }
             Check = {
                 param($Ctx)
@@ -282,9 +282,9 @@ function Get-LabFoundryStages {
                 param($Ctx)
                 $c = $Ctx.State.choices
                 @(
-                    'Before you start: a billing policy with Windows 365 for Agents turned on must exist (Microsoft 365 admin center > Copilot > Cost management > classic Billing & usage > Billing policies; prerequisites page, section 0.1).',
+                    'Before you start: Windows 365 for Agents billing must cover the agent user. New customers: a Copilot Credits spending policy that includes Windows 365 for Agents (Microsoft 365 admin center > Copilot > Cost Management > Configuration). Existing customers may keep a legacy billing plan (classic Billing & usage > Billing policies). See the prerequisites page, section 0.1.',
                     '1. Open https://intune.microsoft.com > Devices > Provision Cloud PCs > Provisioning policies (Agents). Edit the existing policy if it already lists this agent; otherwise select Create policy.',
-                    '2. Choose that billing policy, the number of Cloud PCs (1 is enough for the lab) and the geography.',
+                    '2. Billing: with Copilot Credits no billing plan is linked; with a legacy billing plan, select it. Choose the number of Cloud PCs (1 is enough for the lab) and the geography.',
                     "3. On the Agents page select Add Agents and choose the Foundry agent '$($c.agentName)' (agent user $($c.agentUserUpn)).",
                     '4. Choose the image.',
                     "5. In Groups, check '$($c.foundryDeviceGroup)' is Security / Assigned and dedicated to this preparation policy. Add Intune Provisioning Client (AppId f1346770-5b25-470b-88bd-d5744ab7952c) as an owner. Its name can also be Intune Autopilot ConfidentialClient; match the AppId.",
